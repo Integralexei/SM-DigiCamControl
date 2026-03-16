@@ -456,12 +456,41 @@ namespace CameraControl.Plugins.ToolPlugins
             }
         }
 
+        private static string FindFfmpegPath()
+        {
+            string candidate = Path.Combine(Settings.ApplicationFolder, "ffmpeg.exe");
+            if (File.Exists(candidate)) return candidate;
+
+            foreach (string dir in new[]
+            {
+                @"C:\Program Files (x86)\digiCamControl",
+                @"C:\Program Files\digiCamControl",
+            })
+            {
+                candidate = Path.Combine(dir, "ffmpeg.exe");
+                if (File.Exists(candidate)) return candidate;
+            }
+
+            string pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
+            foreach (string dir in pathEnv.Split(';'))
+            {
+                try
+                {
+                    candidate = Path.Combine(dir.Trim(), "ffmpeg.exe");
+                    if (File.Exists(candidate)) return candidate;
+                }
+                catch { }
+            }
+
+            return null;
+        }
+
         private void GenerateMp4(string tempFolder)
         {
             try
             {
-                string ffmpegPath = Path.Combine(Settings.ApplicationFolder, "ffmpeg.exe");
-                if (!File.Exists(ffmpegPath))
+                string ffmpegPath = FindFfmpegPath();
+                if (ffmpegPath == null)
                 {
                     MessageBox.Show("ffmpeg not found! Please reinstall the application.");
                     return;
