@@ -67,7 +67,9 @@ namespace CameraControl.Classes
             ShowLiveViewCommand =
                 new RelayCommand<ICameraDevice>(
                     device => ServiceProvider.WindowsManager.ExecuteCommand(WindowsCmdConsts.LiveViewWnd_Show, device),
-                    device => (device != null && device.GetCapability(CapabilityEnum.LiveView)));
+                    device => device != null &&
+                              (device.GetCapability(CapabilityEnum.LiveView) ||
+                               ServiceProvider.Settings.DefaultSession.Files.Count > 0));
             DevicePropertyCommand =
                 new RelayCommand<ICameraDevice>(
                     x => ServiceProvider.WindowsManager.ExecuteCommand(WindowsCmdConsts.CameraPropertyWnd_Show, x));

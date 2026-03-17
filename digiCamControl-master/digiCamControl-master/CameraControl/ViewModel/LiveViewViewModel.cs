@@ -2480,6 +2480,12 @@ namespace CameraControl.ViewModel
 
             if (LiveViewData == null)
             {
+                // Review mode: no camera connected, but keep onion skin alive for animation review
+                if (!CameraDevice.IsConnected && OnionSkinEnabled &&
+                    (OnionSkinBackFrames > 0 || OnionSkinForwardFrames > 0))
+                {
+                    UpdateOnionCacheIfNeeded(1920, 1280);
+                }
                 return;
             }
 
