@@ -136,7 +136,7 @@
             <RowDefinition Height="459*" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" MaxWidth="350"/>
+            <ColumnDefinition Width="*" MaxWidth="350" MinWidth="250"/>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
@@ -371,11 +371,8 @@
                 </Image.LayoutTransform>
             </Image>
 
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Grid.Row="2" Grid.RowSpan="2">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Grid.Row="2" Grid.RowSpan="2" ClipToBounds="True">
                 <StackPanel>
-                    <StackPanel.ScrollOwner>
-                        <ScrollViewer />
-                    </StackPanel.ScrollOwner>
                     <materialDesign:Card Margin="4" Visibility="{Binding ShowLuminosityLiveView, Converter={StaticResource BooleanToVisibilityConverter1}, Source={x:Static Core:ServiceProvider.Branding}}">
                         <Expander Header="{T:Translate LabelLuminosity}" IsExpanded="{Binding ShowHistogram}">
                             <Grid Height="75" Margin="4">
@@ -573,7 +570,7 @@
                                           Margin="2"/>
 
                                 <Label Grid.Row="1" Grid.Column="0"
-                                       Content="Предыдущих кадров:"
+                                       Content="Back frames:"
                                        IsEnabled="{Binding OnionSkinEnabled}"
                                        Margin="2" Padding="1"/>
                                 <Controls:NumericUpDown Grid.Row="1" Grid.Column="1"
@@ -583,7 +580,7 @@
                                     Margin="2" NumericInputMode="Numbers" Speedup="False"/>
 
                                 <Label Grid.Row="2" Grid.Column="0"
-                                       Content="Следующих кадров:"
+                                       Content="Forward frames:"
                                        IsEnabled="{Binding OnionSkinEnabled}"
                                        Margin="2" Padding="1"/>
                                 <Controls:NumericUpDown Grid.Row="2" Grid.Column="1"
@@ -645,10 +642,10 @@
                                 <CheckBox Content="Draw arc"
                                           IsChecked="{Binding MotionGuidesDrawMode}"
                                           Margin="2,4"/>
-                                <Button Content="Удалить последнюю"
+                                <Button Content="Remove last"
                                         Command="{Binding RemoveLastGuideCommand}"
-                                        Margin="2,2" HorizontalAlignment="Stretch"/>
-                                <TextBlock Text="1-й клик: начало  2-й клик: конец  Двигайте мышь для изгиба дуги, 3-й клик: подтверждение.  ПКМ: отмена."
+                                        Margin="2,2"/>
+                                <TextBlock Text="Click 1: start  Click 2: end  Move mouse to bend arc  Click 3: confirm.  RMB: cancel."
                                            TextWrapping="Wrap" FontSize="10"
                                            Foreground="{DynamicResource MaterialDesignBodyLight}"
                                            Margin="2"/>
@@ -664,7 +661,7 @@
                                           IsChecked="{Binding InsertMode}"
                                           Margin="2"/>
                                 <TextBlock Margin="2" FontSize="11">
-                                    <Run Text="После кадра: #"/>
+                                    <Run Text="After frame: #"/>
                                     <Run Text="{Binding InsertPointIndex, Mode=OneWay}"/>
                                 </TextBlock>
                                 <TextBlock Text="When enabled, each captured frame is inserted immediately after the currently selected frame instead of being appended at the end."
