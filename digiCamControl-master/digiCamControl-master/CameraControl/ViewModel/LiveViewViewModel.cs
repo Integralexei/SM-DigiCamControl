@@ -2005,17 +2005,15 @@ namespace CameraControl.ViewModel
             var files = ServiceProvider.Settings.DefaultSession?.Files?.ToList();
             if (files == null || files.Count == 0) return;
 
-            // Anchor to the insert point frame (only when InsertMode is ON); fall back to the last frame
-            var insertPointItem = ServiceProvider.Settings.InsertMode
-                ? files.FirstOrDefault(f => f.IsInsertPoint)
-                : null;
-            // selectedIndex = virtual insertion position (where new frame will go)
+            // Anchor: orange-marked frame (IsInsertPoint) if any; otherwise virtual position after last frame.
+            var anchorItem = files.FirstOrDefault(f => f.IsInsertPoint);
+            int anchorIdx = anchorItem != null ? files.IndexOf(anchorItem) : -1;
             int selectedIndex;
             string currentKey;
-            if (insertPointItem != null)
+            if (anchorIdx >= 0)
             {
-                selectedIndex = files.IndexOf(insertPointItem); // insert BEFORE this frame
-                currentKey = insertPointItem.FileName;
+                selectedIndex = anchorIdx;
+                currentKey = anchorItem.FileName;
             }
             else
             {
@@ -2221,12 +2219,14 @@ namespace CameraControl.ViewModel
             // Match live view dimensions exactly — ensures Stretch=Uniform scales both images identically
             var composed = BitmapFactory.New(targetWidth, targetHeight);
 
-            // Back frames: farthest first → nearest on top, relative alpha weights
+            // Back frames: farthest first → nearest on top.
+            // Divide alpha by backCount so the nearest frame's alpha = 255/N (not 255),
+            // ensuring all frames remain visible and none fully covers the ones beneath.
             for (int slot = backCount - 1; slot >= 0; slot--)
             {
                 if (back[slot] == null) continue;
                 double fraction = (double)(backCount - slot) / backCount;
-                byte alpha = (byte)(0xFF * fraction);
+                byte alpha = (byte)(0xFF * fraction / Math.Max(1, backCount));
                 var tint    = System.Windows.Media.Color.FromArgb(alpha, 255, 255, 255);
                 var dstRect = ComputeUniformDestRect(targetWidth, targetHeight, back[slot].PixelWidth, back[slot].PixelHeight);
                 var srcRect = new Rect(0, 0, back[slot].PixelWidth, back[slot].PixelHeight);
@@ -2238,7 +2238,7 @@ namespace CameraControl.ViewModel
             {
                 if (fwd[slot] == null) continue;
                 double fraction = (double)(fwdCount - slot) / fwdCount;
-                byte alpha = (byte)(0xFF * fraction);
+                byte alpha = (byte)(0xFF * fraction / Math.Max(1, fwdCount));
                 var tint    = System.Windows.Media.Color.FromArgb(alpha, 255, 255, 255);
                 var dstRect = ComputeUniformDestRect(targetWidth, targetHeight, fwd[slot].PixelWidth, fwd[slot].PixelHeight);
                 var srcRect = new Rect(0, 0, fwd[slot].PixelWidth, fwd[slot].PixelHeight);
