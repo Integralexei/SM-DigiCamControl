@@ -85,8 +85,8 @@ namespace CameraControl.ViewModel
         // OnionLensK1 is persisted in CameraProperty.LiveviewSettings — no backing field
         private volatile string _onionSkinLastSelectedThumb = null;
         private volatile string _onionCacheBuildingKey = null;
-        private readonly WriteableBitmap[] _onionBackCache = new WriteableBitmap[5];
-        private readonly WriteableBitmap[] _onionForwardCache = new WriteableBitmap[5];
+        private readonly WriteableBitmap[] _onionBackCache = new WriteableBitmap[24];
+        private readonly WriteableBitmap[] _onionForwardCache = new WriteableBitmap[24];
         private readonly object _onionCacheLock = new object();
 
         // Motion guide fields
@@ -466,7 +466,7 @@ namespace CameraControl.ViewModel
             get { return _onionSkinBackFrames; }
             set
             {
-                _onionSkinBackFrames = Math.Max(0, Math.Min(5, value));
+                _onionSkinBackFrames = Math.Max(0, Math.Min(24, value));
                 RaisePropertyChanged(() => OnionSkinBackFrames);
                 InvalidateOnionCache();
             }
@@ -477,7 +477,7 @@ namespace CameraControl.ViewModel
             get { return _onionSkinForwardFrames; }
             set
             {
-                _onionSkinForwardFrames = Math.Max(0, Math.Min(5, value));
+                _onionSkinForwardFrames = Math.Max(0, Math.Min(24, value));
                 RaisePropertyChanged(() => OnionSkinForwardFrames);
                 InvalidateOnionCache();
             }
@@ -1527,6 +1527,7 @@ namespace CameraControl.ViewModel
         private void OnInsertPointChanged(object sender, EventArgs e)
         {
             RaisePropertyChanged(() => InsertPointIndex);
+            InvalidateOnionCache();
         }
 
         private void WindowsManagerEvent(string cmd, object o)
@@ -1987,7 +1988,7 @@ namespace CameraControl.ViewModel
         {
             lock (_onionCacheLock)
             {
-                for (int i = 0; i < 5; i++)
+                for (int i = 0; i < 24; i++)
                 {
                     _onionBackCache[i] = null;
                     _onionForwardCache[i] = null;
@@ -2041,46 +2042,68 @@ namespace CameraControl.ViewModel
             int backFrames = _onionSkinBackFrames;
             int fwdFrames  = _onionSkinForwardFrames;
 
-            // --- File I/O happens here, OUTSIDE the lock ---
-            // Other timer tasks can freely Blit the existing cache while we load.
-            var newBack = new WriteableBitmap[5];
-            var newFwd  = new WriteableBitmap[5];
+            var newBack = new WriteableBitmap[24];
+            var newFwd  = new WriteableBitmap[24];
+            WriteableBitmap composed = null;
+            bool myBuildSucceeded = false;
 
-            for (int slot = 0; slot < 5; slot++)
+            try
             {
-                int fileIndex = selectedIndex - 1 - slot;
-                if (slot >= backFrames || fileIndex < 0) continue;
-                newBack[slot] = LoadOnionFrame(files[fileIndex].LargeThumb, files[fileIndex].FileName, targetWidth);
-            }
-
-            for (int slot = 0; slot < 5; slot++)
-            {
-                int fileIndex = selectedIndex + slot;
-                if (slot >= fwdFrames || fileIndex >= files.Count) continue;
-                newFwd[slot] = LoadOnionFrame(files[fileIndex].LargeThumb, files[fileIndex].FileName, targetWidth);
-            }
-
-            // Build pre-composed bitmap (Blit once here, never per live-view frame)
-            var composed = BuildComposedOnionBitmap(newBack, backFrames, newFwd, fwdFrames, targetWidth, targetHeight);
-            if (composed != null) composed.Freeze(); // freeze so any thread can read it
-
-            // Swap in the new frames — brief lock, no I/O inside
-            lock (_onionCacheLock)
-            {
-                if (_onionCacheBuildingKey == currentKey) // still the intended key
+                // --- File I/O happens here, OUTSIDE the lock ---
+                // Other timer tasks can freely read the existing cache while we load.
+                for (int slot = 0; slot < 24; slot++)
                 {
-                    for (int i = 0; i < 5; i++)
+                    int fileIndex = selectedIndex - 1 - slot;
+                    if (slot >= backFrames || fileIndex < 0) continue;
+                    newBack[slot] = LoadOnionFrame(files[fileIndex].LargeThumb, files[fileIndex].FileName, targetWidth);
+                }
+
+                for (int slot = 0; slot < 24; slot++)
+                {
+                    int fileIndex = selectedIndex + slot;
+                    if (slot >= fwdFrames || fileIndex >= files.Count) continue;
+                    newFwd[slot] = LoadOnionFrame(files[fileIndex].LargeThumb, files[fileIndex].FileName, targetWidth);
+                }
+
+                // Build pre-composed bitmap (Blit once here, never per live-view frame)
+                composed = BuildComposedOnionBitmap(newBack, backFrames, newFwd, fwdFrames, targetWidth, targetHeight);
+                if (composed != null) composed.Freeze(); // freeze so any thread can read it
+
+                // Swap in the new frames — brief lock, no I/O inside
+                lock (_onionCacheLock)
+                {
+                    if (_onionCacheBuildingKey == currentKey) // still the intended key
                     {
-                        _onionBackCache[i] = newBack[i];
-                        _onionForwardCache[i] = newFwd[i];
+                        if (composed != null)
+                        {
+                            for (int i = 0; i < 24; i++)
+                            {
+                                _onionBackCache[i] = newBack[i];
+                                _onionForwardCache[i] = newFwd[i];
+                            }
+                            _onionSkinLastSelectedThumb = currentKey; // only mark done when we have a valid bitmap
+                        }
+                        _onionCacheBuildingKey = null;
+                        myBuildSucceeded = composed != null;
                     }
-                    _onionSkinLastSelectedThumb = currentKey;
-                    _onionCacheBuildingKey = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Onion skin build error", ex);
+            }
+            finally
+            {
+                // Always release the build slot — prevents permanent deadlock if an exception fired
+                lock (_onionCacheLock)
+                {
+                    if (_onionCacheBuildingKey == currentKey)
+                        _onionCacheBuildingKey = null;
                 }
             }
 
             // Publish frozen bitmap — WPF binding marshals to UI thread automatically
-            if (_onionCacheBuildingKey == null) // only if we're still the owner
+            if (myBuildSucceeded)
                 OnionSkinBitmap = composed;
         }
 
@@ -2191,7 +2214,7 @@ namespace CameraControl.ViewModel
             int targetWidth, int targetHeight)
         {
             bool anyLoaded = false;
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 24; i++)
                 if (back[i] != null || fwd[i] != null) { anyLoaded = true; break; }
             if (!anyLoaded) return null;
 
