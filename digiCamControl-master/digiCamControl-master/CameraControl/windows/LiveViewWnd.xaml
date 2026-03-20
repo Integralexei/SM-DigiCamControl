@@ -560,8 +560,6 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <CheckBox Grid.Row="0" Grid.ColumnSpan="2"
@@ -570,61 +568,41 @@
                                           Margin="2"/>
 
                                 <Label Grid.Row="1" Grid.Column="0"
-                                       Content="Back frames:"
-                                       IsEnabled="{Binding OnionSkinEnabled}"
-                                       Margin="2" Padding="1"/>
-                                <Controls:NumericUpDown Grid.Row="1" Grid.Column="1"
-                                    Minimum="0" Maximum="5"
-                                    Value="{Binding OnionSkinBackFrames}"
-                                    IsEnabled="{Binding OnionSkinEnabled}"
-                                    Margin="2" NumericInputMode="Numbers" Speedup="False"/>
-
-                                <Label Grid.Row="2" Grid.Column="0"
-                                       Content="Forward frames:"
-                                       IsEnabled="{Binding OnionSkinEnabled}"
-                                       Margin="2" Padding="1"/>
-                                <Controls:NumericUpDown Grid.Row="2" Grid.Column="1"
-                                    Minimum="0" Maximum="5"
-                                    Value="{Binding OnionSkinForwardFrames}"
-                                    IsEnabled="{Binding OnionSkinEnabled}"
-                                    Margin="2" NumericInputMode="Numbers" Speedup="False"/>
-
-                                <Label Grid.Row="3" Grid.Column="0"
                                        Content="Opacity %:"
                                        IsEnabled="{Binding OnionSkinEnabled}"
                                        Margin="2" Padding="1"/>
-                                <Controls:NumericUpDown Grid.Row="3" Grid.Column="1"
+                                <Controls:NumericUpDown Grid.Row="1" Grid.Column="1"
                                     Minimum="0" Maximum="100"
                                     Value="{Binding OnionSkinOpacity}"
                                     IsEnabled="{Binding OnionSkinEnabled}"
                                     Margin="2" NumericInputMode="Numbers" Speedup="False"/>
 
-                                <Slider Grid.Row="4" Grid.ColumnSpan="2"
+                                <Slider Grid.Row="2" Grid.ColumnSpan="2"
                                         Minimum="0" Maximum="100"
                                         Value="{Binding OnionSkinOpacity}"
                                         IsEnabled="{Binding OnionSkinEnabled}"
                                         TickFrequency="10" TickPlacement="BottomRight"
                                         Margin="2"/>
 
-                                <Label Grid.Row="5" Grid.Column="0"
+                                <Label Grid.Row="3" Grid.Column="0"
                                        Content="Lens corr.:"
                                        IsEnabled="{Binding OnionSkinEnabled}"
                                        Margin="2" Padding="1"/>
-                                <Controls:NumericUpDown Grid.Row="5" Grid.Column="1"
+                                <Controls:NumericUpDown Grid.Row="3" Grid.Column="1"
                                     Minimum="-50" Maximum="50"
                                     Value="{Binding OnionLensK1}"
                                     IsEnabled="{Binding OnionSkinEnabled}"
                                     Margin="2" NumericInputMode="Numbers" Speedup="False"/>
 
-                                <Slider Grid.Row="6" Grid.ColumnSpan="2"
+                                <Slider Grid.Row="4" Grid.ColumnSpan="2"
                                         Minimum="-50" Maximum="50"
                                         Value="{Binding OnionLensK1}"
                                         IsEnabled="{Binding OnionSkinEnabled}"
                                         TickFrequency="10" TickPlacement="BottomRight"
                                         Margin="2"/>
 
-                                <TextBlock Grid.Row="7" Grid.ColumnSpan="2"
-                                           Text="Automatically uses the last captured frame as reference."
+                                <TextBlock Grid.Row="5" Grid.ColumnSpan="2"
+                                           Text="Blends the reference frame over live view. Normal mode: last captured frame. Insert Mode: frame before the selected insert point."
                                            TextWrapping="Wrap" FontSize="10"
                                            Foreground="{DynamicResource MaterialDesignBodyLight}"
                                            Margin="2"/>
