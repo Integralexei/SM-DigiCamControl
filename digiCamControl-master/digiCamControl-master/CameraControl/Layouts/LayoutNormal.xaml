@@ -121,7 +121,14 @@
                         </Button>
                     <Button Margin="4" ToolTip="{translation:TranslateExtension LabelRotateClockwise}" VerticalAlignment="Center" HorizontalAlignment="Right"  Command="{Binding Path=RotateRightCommand}"  Style="{DynamicResource MaterialDesignFlatButton}">
                             <materialDesign:PackIcon Width="24" Height="24" Kind="RotateRightVariant" />
-                        </Button>                    
+                        </Button>
+                    <!-- Insert Mode toggle: inserts new frames after the selected (orange) frame -->
+                    <ToggleButton Height="40" Width="40" Margin="2,-2"
+                                  IsChecked="{Binding Source={x:Static Member=Core:ServiceProvider.Settings}, Path=InsertMode}"
+                                  Style="{StaticResource MaterialDesignFlatPrimaryToggleButton}"
+                                  ToolTip="Insert Mode — new frames are inserted before the selected frame (orange marker) instead of being appended at the end">
+                        <materialDesign:PackIcon Width="24" Height="24" Kind="CameraPlus" />
+                    </ToggleButton>
                     <ItemsControl ItemsSource="{Binding PanelPlugins}" >
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>

@@ -496,21 +496,15 @@ namespace CameraControl.Plugins.ToolPlugins
                     return;
                 }
 
-                string parameters = @"-r {0} -i {1}\img00%04d.jpg -c:v libx264 -vf fps=25 -pix_fmt yuv420p";
-                if (VideoType.Name.StartsWith("4K"))
-                {
-                    parameters = @"-r {0} -i {1}\img00%04d.jpg -c:v libx265 -vf fps=25";
-                }
-//                parameters += string.Format("-s {0}x{1}", Width, Height);
-                if (Preview)
-                {
-                    parameters += " -vf scale=400:264";
-                }
-                else
-                {
-                    parameters += string.Format(" -vf scale={0}:{1}", Width, Height);
-                }
-                parameters += " {2}";
+                // Merge fps + scale into ONE -vf filter chain.
+                // Two separate -vf flags cause ffmpeg 3.x+ to error and produce no output.
+                string vfFilter = Preview
+                    ? "fps=25,scale=400:264"
+                    : string.Format("fps=25,scale={0}:{1}", Width, Height);
+
+                string parameters = string.Format(@"-r {0} -i ""{1}\img00%04d.jpg"" -c:v libx264 -pix_fmt yuv420p -vf {2} ""{3}""",
+                    Fps, tempFolder, vfFilter, OutPutFile);
+
                 OutPut.Insert(0, "Generating video ..... ");
                 Process newprocess = new Process();
                 Progress = 0;
@@ -518,7 +512,7 @@ namespace CameraControl.Plugins.ToolPlugins
                 newprocess.StartInfo = new ProcessStartInfo()
                 {
                     FileName = ffmpegPath,
-                    Arguments = string.Format(parameters, Fps, tempFolder, OutPutFile),
+                    Arguments = parameters,
                     UseShellExecute = false,
                     WindowStyle = ProcessWindowStyle.Minimized,
                     CreateNoWindow = true,

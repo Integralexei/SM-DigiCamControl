@@ -12,6 +12,8 @@ This edition adds a set of stop motion–specific tools on top of the standard d
 | Motion Guides (Bezier arcs) | — | ✓ |
 | Review mode (no camera) | — | ✓ |
 | Insert Mode (capture at position) | — | ✓ |
+| Filmstrip touchpad scroll | — | ✓ |
+| Capture hotkey (Ctrl+Enter) | — | ✓ |
 | English UI in Live View | partial | ✓ |
 
 See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes.
@@ -21,15 +23,17 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes.
 ## Added Features
 
 ### Onion Skin
-Overlays up to 24 previous and/or next frames as semi-transparent ghost images on top of the live view. Each ghost is progressively more transparent — the nearest frame is most opaque, the farthest is nearly invisible. Helps animators judge movement across multiple frames at once.
+Overlays the previous frame as a semi-transparent ghost image on top of the live view. A single opacity slider (0–100%) controls how strongly the ghost is visible — great for judging movement from one frame to the next.
 
-- Back/forward frame count: 0–24 each, controlled by slider and numeric input
-- Opacity slider (0–100%)
-- **Anchor**: when Insert Mode is ON, ghost frames are counted relative to the currently selected (orange) frame; otherwise anchored to the last captured frame
-- Rendered via WPF GPU compositing — zero per-frame CPU cost
-- Cache is rebuilt only when anchor or frame count changes
+- **Ghost frame selection:**
+  - Insert Mode ON + orange frame selected → shows the frame immediately *before* the selected frame
+  - Insert Mode ON, no frame selected → shows the last captured frame
+  - Insert Mode OFF → always shows the last captured frame
+  - If the insert point is the very first frame, no ghost is shown (no previous frame exists)
+- Opacity slider (0–100%): controls ghost visibility via WPF GPU compositing — zero per-frame CPU cost
+- Cache is rebuilt only when the reference frame changes
 - Fallback: loads from original photo path if thumbnail is missing
-- Lens distortion correction (barrel/pincushion, ±50 units)
+- Lens distortion correction (barrel/pincushion, ±50 units) — applied once at cache build time
 
 ### Motion Guides
 Quadratic Bezier arcs drawn as canvas overlays on the live view. Used to plan and visualize character movement paths.
@@ -43,10 +47,11 @@ Quadratic Bezier arcs drawn as canvas overlays on the live view. Used to plan an
 ### Insert Mode
 Controls where newly captured frames are inserted in the session filmstrip.
 
-- **ON (default)**: each new frame is inserted immediately after the currently selected (orange) frame in the filmstrip
+- **ON**: each new frame is inserted immediately before the currently selected (orange) frame in the filmstrip
 - **OFF**: new frames are appended at the end
-- Selecting a frame in the filmstrip sets it as the insert point (orange border); clicking it again deselects
-- Onion Skin automatically re-anchors to the selected frame when Insert Mode is ON
+- Toggle button in the filmstrip toolbar (camera+ icon); highlights when active
+- Tooltip: *"Insert Mode — new frames are inserted before the selected frame (orange marker) instead of being appended at the end"*
+- Onion Skin automatically re-anchors to the frame before the selected frame when Insert Mode is ON
 
 ### Review Mode (no camera)
 Allows opening the Live View window even when no camera is connected, so you can inspect the Onion Skin overlay across existing session frames.
@@ -55,6 +60,19 @@ Allows opening the Live View window even when no camera is connected, so you can
 - The live view feed is blank, but the Onion Skin overlay remains fully functional
 - Useful for reviewing animation timing without a connected camera
 
+### Filmstrip Touchpad Scroll
+The filmstrip (horizontal frame strip below the live view) can be scrolled with a touchpad left/right swipe, in addition to the mouse wheel.
+
+- Handles `WM_MOUSEHWHEEL` (Windows horizontal wheel message) via `HwndSource` hook
+- Works with modern precision touchpads and horizontal scroll wheels
+- Vertical mouse wheel continues to scroll horizontally as before
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| **Ctrl+Enter** | Capture (same as the Capture button in Live View) |
+
 ---
 
 ## Bug Fixes vs. Original
@@ -62,8 +80,9 @@ Allows opening the Live View window even when no camera is connected, so you can
 | Fix | Description |
 |---|---|
 | Sidebar layout collapse | Opening Motion Guides expander no longer hides NumericUpDown controls or the Capture/Confirm buttons. Root cause: outer column `Width="Auto"` replaced with `Width="*"`. |
+| Image Sequencer — video not created | `GenerateMp4()` passed two separate `-vf` flags to ffmpeg; ffmpeg 3.x+ treats this as an error and exits without producing output. Fixed by merging both filters into a single `-vf fps=25,scale=W:H` chain. Paths are now also quoted to handle spaces in usernames or session names. |
+| Image Sequencer — 4K codec | 4K preset switched from `libx265` (H.265) to `libx264` (H.264). H.265 requires a paid Windows codec extension; H.264 plays natively on all Windows machines. |
 | Image Sequencer lag | Reduced lag in the image sequencer panel. |
-| ffmpeg not found | Fixed error when ffmpeg is not in PATH. |
 
 ---
 

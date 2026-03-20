@@ -79,14 +79,10 @@ namespace CameraControl.ViewModel
 
         // Onion skin fields
         private bool _onionSkinEnabled = false;
-        private int _onionSkinBackFrames = 1;
-        private int _onionSkinForwardFrames = 0;
         private int _onionSkinOpacity = 70;
         // OnionLensK1 is persisted in CameraProperty.LiveviewSettings — no backing field
         private volatile string _onionSkinLastSelectedThumb = null;
         private volatile string _onionCacheBuildingKey = null;
-        private readonly WriteableBitmap[] _onionBackCache = new WriteableBitmap[24];
-        private readonly WriteableBitmap[] _onionForwardCache = new WriteableBitmap[24];
         private readonly object _onionCacheLock = new object();
 
         // Motion guide fields
@@ -461,28 +457,6 @@ namespace CameraControl.ViewModel
             }
         }
 
-        public int OnionSkinBackFrames
-        {
-            get { return _onionSkinBackFrames; }
-            set
-            {
-                _onionSkinBackFrames = Math.Max(0, Math.Min(24, value));
-                RaisePropertyChanged(() => OnionSkinBackFrames);
-                InvalidateOnionCache();
-            }
-        }
-
-        public int OnionSkinForwardFrames
-        {
-            get { return _onionSkinForwardFrames; }
-            set
-            {
-                _onionSkinForwardFrames = Math.Max(0, Math.Min(24, value));
-                RaisePropertyChanged(() => OnionSkinForwardFrames);
-                InvalidateOnionCache();
-            }
-        }
-
         public int OnionSkinOpacity
         {
             get { return _onionSkinOpacity; }
@@ -494,7 +468,7 @@ namespace CameraControl.ViewModel
             }
         }
 
-        // Normalized [0..1] for WPF Image.Opacity binding — GPU compositing, zero CPU cost per frame
+        // Ghost opacity: 0 = invisible, 1 = fully visible
         public double OnionSkinOpacityNormalized => _onionSkinOpacity / 100.0;
 
         // Lens distortion correction stored in LiveviewSettings (persisted per camera).
@@ -1988,11 +1962,6 @@ namespace CameraControl.ViewModel
         {
             lock (_onionCacheLock)
             {
-                for (int i = 0; i < 24; i++)
-                {
-                    _onionBackCache[i] = null;
-                    _onionForwardCache[i] = null;
-                }
                 _onionSkinLastSelectedThumb = null;
                 _onionCacheBuildingKey = null;
             }
@@ -2005,24 +1974,29 @@ namespace CameraControl.ViewModel
             var files = ServiceProvider.Settings.DefaultSession?.Files?.ToList();
             if (files == null || files.Count == 0) return;
 
-            // Anchor: orange-marked frame (IsInsertPoint) if any; otherwise virtual position after last frame.
-            var anchorItem = files.FirstOrDefault(f => f.IsInsertPoint);
-            int anchorIdx = anchorItem != null ? files.IndexOf(anchorItem) : -1;
-            int selectedIndex;
-            string currentKey;
-            if (anchorIdx >= 0)
+            // Determine reference frame (the single ghost shown under live view):
+            //   - Insert mode ON + orange frame at index i > 0: frame immediately before it
+            //   - Everything else: last frame in session
+            FileItem refItem = null;
+            bool insertModeWithPoint = false;
+            if (ServiceProvider.Settings.InsertMode)
             {
-                selectedIndex = anchorIdx;
-                currentKey = anchorItem.FileName;
+                var insertItem = files.FirstOrDefault(f => f.IsInsertPoint);
+                if (insertItem != null)
+                {
+                    insertModeWithPoint = true;
+                    int idx = files.IndexOf(insertItem);
+                    refItem = idx > 0 ? files[idx - 1] : null; // null if insert point is first frame
+                }
             }
-            else
-            {
-                selectedIndex = files.Count;                    // virtual position after last
-                currentKey = files[files.Count - 1].FileName;
-            }
+            if (!insertModeWithPoint)
+                refItem = files[files.Count - 1];
+            if (refItem == null) return; // insert point is first frame — nothing to show
+
+            string currentKey = refItem.FileName;
             if (string.IsNullOrEmpty(currentKey)) return;
 
-            // Fast path: cache already valid (volatile reads, no lock)
+            // Fast path: cache already valid (volatile read, no lock)
             if (_onionSkinLastSelectedThumb == currentKey) return;
 
             // Atomic check-and-reserve: ensure only ONE timer task does the load
@@ -2031,58 +2005,26 @@ namespace CameraControl.ViewModel
             {
                 if (_onionSkinLastSelectedThumb != currentKey && _onionCacheBuildingKey != currentKey)
                 {
-                    _onionCacheBuildingKey = currentKey; // reserve slot
+                    _onionCacheBuildingKey = currentKey;
                     shouldLoad = true;
                 }
             }
-            if (!shouldLoad) return; // another task is already loading this key
+            if (!shouldLoad) return;
 
-            int backFrames = _onionSkinBackFrames;
-            int fwdFrames  = _onionSkinForwardFrames;
-
-            var newBack = new WriteableBitmap[24];
-            var newFwd  = new WriteableBitmap[24];
-            WriteableBitmap composed = null;
-            bool myBuildSucceeded = false;
-
+            BitmapSource loaded = null;
+            bool succeeded = false;
             try
             {
-                // --- File I/O happens here, OUTSIDE the lock ---
-                // Other timer tasks can freely read the existing cache while we load.
-                for (int slot = 0; slot < 24; slot++)
-                {
-                    int fileIndex = selectedIndex - 1 - slot;
-                    if (slot >= backFrames || fileIndex < 0) continue;
-                    newBack[slot] = LoadOnionFrame(files[fileIndex].LargeThumb, files[fileIndex].FileName, targetWidth);
-                }
+                // File I/O outside the lock
+                loaded = LoadOnionFrame(refItem.LargeThumb, refItem.FileName, targetWidth);
 
-                for (int slot = 0; slot < 24; slot++)
-                {
-                    int fileIndex = selectedIndex + slot;
-                    if (slot >= fwdFrames || fileIndex >= files.Count) continue;
-                    newFwd[slot] = LoadOnionFrame(files[fileIndex].LargeThumb, files[fileIndex].FileName, targetWidth);
-                }
-
-                // Build pre-composed bitmap (Blit once here, never per live-view frame)
-                composed = BuildComposedOnionBitmap(newBack, backFrames, newFwd, fwdFrames, targetWidth, targetHeight);
-                if (composed != null) composed.Freeze(); // freeze so any thread can read it
-
-                // Swap in the new frames — brief lock, no I/O inside
                 lock (_onionCacheLock)
                 {
-                    if (_onionCacheBuildingKey == currentKey) // still the intended key
+                    if (_onionCacheBuildingKey == currentKey)
                     {
-                        if (composed != null)
-                        {
-                            for (int i = 0; i < 24; i++)
-                            {
-                                _onionBackCache[i] = newBack[i];
-                                _onionForwardCache[i] = newFwd[i];
-                            }
-                            _onionSkinLastSelectedThumb = currentKey; // only mark done when we have a valid bitmap
-                        }
+                        _onionSkinLastSelectedThumb = currentKey;
                         _onionCacheBuildingKey = null;
-                        myBuildSucceeded = composed != null;
+                        succeeded = loaded != null;
                     }
                 }
             }
@@ -2092,7 +2034,6 @@ namespace CameraControl.ViewModel
             }
             finally
             {
-                // Always release the build slot — prevents permanent deadlock if an exception fired
                 lock (_onionCacheLock)
                 {
                     if (_onionCacheBuildingKey == currentKey)
@@ -2100,12 +2041,11 @@ namespace CameraControl.ViewModel
                 }
             }
 
-            // Publish frozen bitmap — WPF binding marshals to UI thread automatically
-            if (myBuildSucceeded)
-                OnionSkinBitmap = composed;
+            if (succeeded)
+                OnionSkinBitmap = loaded;
         }
 
-        private WriteableBitmap LoadOnionFrame(string thumbPath, string fallbackPath, int decodeWidth)
+        private BitmapSource LoadOnionFrame(string thumbPath, string fallbackPath, int decodeWidth)
         {
             try
             {
@@ -2122,18 +2062,21 @@ namespace CameraControl.ViewModel
                 bitmapSource.DecodePixelWidth = decodeWidth;
                 bitmapSource.BeginInit();
                 bitmapSource.UriSource = new Uri(pathToLoad);
-                bitmapSource.CacheOption = BitmapCacheOption.OnLoad; // Close file handle immediately
+                bitmapSource.CacheOption = BitmapCacheOption.OnLoad;
                 bitmapSource.EndInit();
                 bitmapSource.Freeze();
-                var wb = BitmapFactory.ConvertToPbgra32Format(bitmapSource);
-                // Apply lens distortion correction if requested (runs once at cache build time)
+
+                // Apply lens distortion correction if needed (runs once at cache build time)
                 int lensK1 = CameraProperty.LiveviewSettings.OnionLensK1;
                 if (lensK1 != 0)
+                {
+                    var wb = BitmapFactory.ConvertToPbgra32Format(bitmapSource);
                     wb = ApplyRadialUndistort(wb, lensK1 / 300.0);
-                // Do NOT Freeze wb — WriteableBitmapExtensionsLocal.Blit opens source
-                // with ReadWriteMode.ReadWrite (calls Lock()), which throws on frozen bitmaps.
-                // Access is serialised by _onionCacheLock instead.
-                return wb;
+                    wb.Freeze();
+                    return wb;
+                }
+
+                return bitmapSource;
             }
             catch (Exception ex)
             {
@@ -2199,68 +2142,6 @@ namespace CameraControl.ViewModel
                 }
             }
             return dst;
-        }
-
-        /// <summary>
-        /// Composites all onion frames into a single frozen bitmap (done once at cache build time).
-        /// The composed bitmap has exactly the same pixel dimensions as the live view bitmap so that
-        /// both Image elements render at identical positions under Stretch=Uniform.
-        /// </summary>
-        private WriteableBitmap BuildComposedOnionBitmap(
-            WriteableBitmap[] back, int backCount,
-            WriteableBitmap[] fwd,  int fwdCount,
-            int targetWidth, int targetHeight)
-        {
-            bool anyLoaded = false;
-            for (int i = 0; i < 24; i++)
-                if (back[i] != null || fwd[i] != null) { anyLoaded = true; break; }
-            if (!anyLoaded) return null;
-
-            // Match live view dimensions exactly — ensures Stretch=Uniform scales both images identically
-            var composed = BitmapFactory.New(targetWidth, targetHeight);
-
-            // Back frames: farthest first → nearest on top.
-            // Divide alpha by backCount so the nearest frame's alpha = 255/N (not 255),
-            // ensuring all frames remain visible and none fully covers the ones beneath.
-            for (int slot = backCount - 1; slot >= 0; slot--)
-            {
-                if (back[slot] == null) continue;
-                double fraction = (double)(backCount - slot) / backCount;
-                byte alpha = (byte)(0xFF * fraction / Math.Max(1, backCount));
-                var tint    = System.Windows.Media.Color.FromArgb(alpha, 255, 255, 255);
-                var dstRect = ComputeUniformDestRect(targetWidth, targetHeight, back[slot].PixelWidth, back[slot].PixelHeight);
-                var srcRect = new Rect(0, 0, back[slot].PixelWidth, back[slot].PixelHeight);
-                composed.Blit(dstRect, back[slot], srcRect, tint, WriteableBitmapExtensions.BlendMode.Alpha);
-            }
-
-            // Forward frames: same logic
-            for (int slot = fwdCount - 1; slot >= 0; slot--)
-            {
-                if (fwd[slot] == null) continue;
-                double fraction = (double)(fwdCount - slot) / fwdCount;
-                byte alpha = (byte)(0xFF * fraction / Math.Max(1, fwdCount));
-                var tint    = System.Windows.Media.Color.FromArgb(alpha, 255, 255, 255);
-                var dstRect = ComputeUniformDestRect(targetWidth, targetHeight, fwd[slot].PixelWidth, fwd[slot].PixelHeight);
-                var srcRect = new Rect(0, 0, fwd[slot].PixelWidth, fwd[slot].PixelHeight);
-                composed.Blit(dstRect, fwd[slot], srcRect, tint, WriteableBitmapExtensions.BlendMode.Alpha);
-            }
-
-            return composed;
-        }
-
-        /// <summary>
-        /// Computes the destination Rect for blitting a frame into a container using
-        /// the same Stretch=Uniform + Center logic as a WPF Image element.
-        /// </summary>
-        private static Rect ComputeUniformDestRect(int containerW, int containerH, int frameW, int frameH)
-        {
-            // frameW always equals containerW (LoadOnionFrame uses DecodePixelWidth=containerW).
-            // Cameras preserve horizontal FOV across aspect ratios — only vertical extent differs.
-            // → Always map photo at full width (x=0), center vertically. Blit handles out-of-bounds rows.
-            double scale = (double)containerW / frameW;   // = 1.0 when frameW==containerW
-            double h = frameH * scale;
-            double y = (containerH - h) / 2.0;            // negative OK: Blit skips out-of-bounds rows
-            return new Rect(0, y, containerW, h);
         }
 
         // --- End Onion Skin cache methods ---
@@ -2504,8 +2385,7 @@ namespace CameraControl.ViewModel
             if (LiveViewData == null)
             {
                 // Review mode: no camera connected, but keep onion skin alive for animation review
-                if (!CameraDevice.IsConnected && OnionSkinEnabled &&
-                    (OnionSkinBackFrames > 0 || OnionSkinForwardFrames > 0))
+                if (!CameraDevice.IsConnected && OnionSkinEnabled)
                 {
                     UpdateOnionCacheIfNeeded(1920, 1280);
                 }
@@ -2737,7 +2617,7 @@ namespace CameraControl.ViewModel
                     writeableBitmap.PixelHeight - (2*CropOffsetY));
             }
             // Onion Skin cache uses the FINAL displayed dimensions (after flip + crop)
-            if (OnionSkinEnabled && (OnionSkinBackFrames > 0 || OnionSkinForwardFrames > 0))
+            if (OnionSkinEnabled)
                 UpdateOnionCacheIfNeeded(writeableBitmap.PixelWidth, writeableBitmap.PixelHeight);
 
             writeableBitmap.Freeze();

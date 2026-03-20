@@ -124,6 +124,9 @@
         </ResourceDictionary>
 
     </Window.Resources>
+    <Window.InputBindings>
+        <KeyBinding Key="Return" Modifiers="Ctrl" Command="{Binding CaptureCommand}"/>
+    </Window.InputBindings>
     <Window.DataContext>
         <ViewModel:LiveViewViewModel/>
     </Window.DataContext>
@@ -150,7 +153,7 @@
                 <RotateTransform  Angle="{Binding Rotation}" />
             </Image.LayoutTransform>
         </Image>
-        <!-- Onion Skin overlay: GPU compositing via WPF opacity — zero CPU cost per frame -->
+        <!-- Onion Skin: ghost overlay (previous frame shown at slider opacity) -->
         <Image Grid.Column="2" Grid.RowSpan="4"
                Source="{Binding OnionSkinBitmap}"
                Opacity="{Binding OnionSkinOpacityNormalized}"
@@ -560,10 +563,6 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <CheckBox Grid.Row="0" Grid.ColumnSpan="2"
@@ -572,75 +571,41 @@
                                           Margin="2"/>
 
                                 <Label Grid.Row="1" Grid.Column="0"
-                                       Content="Back frames:"
+                                       Content="Ghost %:"
                                        IsEnabled="{Binding OnionSkinEnabled}"
                                        Margin="2" Padding="1"/>
                                 <Controls:NumericUpDown Grid.Row="1" Grid.Column="1"
-                                    Minimum="0" Maximum="24"
-                                    Value="{Binding OnionSkinBackFrames}"
-                                    IsEnabled="{Binding OnionSkinEnabled}"
-                                    Margin="2" NumericInputMode="Numbers" Speedup="False"/>
-
-                                <Slider Grid.Row="2" Grid.ColumnSpan="2"
-                                        Minimum="0" Maximum="24"
-                                        Value="{Binding OnionSkinBackFrames}"
-                                        IsEnabled="{Binding OnionSkinEnabled}"
-                                        TickFrequency="1" TickPlacement="None"
-                                        Margin="2"/>
-
-                                <Label Grid.Row="3" Grid.Column="0"
-                                       Content="Forward frames:"
-                                       IsEnabled="{Binding OnionSkinEnabled}"
-                                       Margin="2" Padding="1"/>
-                                <Controls:NumericUpDown Grid.Row="3" Grid.Column="1"
-                                    Minimum="0" Maximum="24"
-                                    Value="{Binding OnionSkinForwardFrames}"
-                                    IsEnabled="{Binding OnionSkinEnabled}"
-                                    Margin="2" NumericInputMode="Numbers" Speedup="False"/>
-
-                                <Slider Grid.Row="4" Grid.ColumnSpan="2"
-                                        Minimum="0" Maximum="24"
-                                        Value="{Binding OnionSkinForwardFrames}"
-                                        IsEnabled="{Binding OnionSkinEnabled}"
-                                        TickFrequency="1" TickPlacement="None"
-                                        Margin="2"/>
-
-                                <Label Grid.Row="5" Grid.Column="0"
-                                       Content="Opacity %:"
-                                       IsEnabled="{Binding OnionSkinEnabled}"
-                                       Margin="2" Padding="1"/>
-                                <Controls:NumericUpDown Grid.Row="5" Grid.Column="1"
                                     Minimum="0" Maximum="100"
                                     Value="{Binding OnionSkinOpacity}"
                                     IsEnabled="{Binding OnionSkinEnabled}"
                                     Margin="2" NumericInputMode="Numbers" Speedup="False"/>
 
-                                <Slider Grid.Row="6" Grid.ColumnSpan="2"
+                                <Slider Grid.Row="2" Grid.ColumnSpan="2"
                                         Minimum="0" Maximum="100"
                                         Value="{Binding OnionSkinOpacity}"
                                         IsEnabled="{Binding OnionSkinEnabled}"
                                         TickFrequency="10" TickPlacement="BottomRight"
                                         Margin="2"/>
 
-                                <Label Grid.Row="7" Grid.Column="0"
+                                <Label Grid.Row="3" Grid.Column="0"
                                        Content="Lens corr.:"
                                        IsEnabled="{Binding OnionSkinEnabled}"
                                        Margin="2" Padding="1"/>
-                                <Controls:NumericUpDown Grid.Row="7" Grid.Column="1"
+                                <Controls:NumericUpDown Grid.Row="3" Grid.Column="1"
                                     Minimum="-50" Maximum="50"
                                     Value="{Binding OnionLensK1}"
                                     IsEnabled="{Binding OnionSkinEnabled}"
                                     Margin="2" NumericInputMode="Numbers" Speedup="False"/>
 
-                                <Slider Grid.Row="8" Grid.ColumnSpan="2"
+                                <Slider Grid.Row="4" Grid.ColumnSpan="2"
                                         Minimum="-50" Maximum="50"
                                         Value="{Binding OnionLensK1}"
                                         IsEnabled="{Binding OnionSkinEnabled}"
                                         TickFrequency="10" TickPlacement="BottomRight"
                                         Margin="2"/>
 
-                                <TextBlock Grid.Row="9" Grid.ColumnSpan="2"
-                                           Text="Automatically uses the last captured frame as reference."
+                                <TextBlock Grid.Row="5" Grid.ColumnSpan="2"
+                                           Text="Shows the previous frame (or frame before insert point) as a ghost overlay."
                                            TextWrapping="Wrap" FontSize="10"
                                            Foreground="{DynamicResource MaterialDesignBodyLight}"
                                            Margin="2"/>
@@ -669,25 +634,6 @@
                         </Expander>
                     </materialDesign:Card>
                     <!-- End Motion Guides card -->
-                    <!-- Insert Mode card -->
-                    <materialDesign:Card Margin="4">
-                        <Expander Header="Insert Mode">
-                            <StackPanel Margin="4">
-                                <CheckBox Content="Insert after selected frame"
-                                          IsChecked="{Binding InsertMode}"
-                                          Margin="2"/>
-                                <TextBlock Margin="2" FontSize="11">
-                                    <Run Text="After frame: #"/>
-                                    <Run Text="{Binding InsertPointIndex, Mode=OneWay}"/>
-                                </TextBlock>
-                                <TextBlock Text="When enabled, each captured frame is inserted immediately after the currently selected frame instead of being appended at the end."
-                                           TextWrapping="Wrap" FontSize="10"
-                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
-                                           Margin="2"/>
-                            </StackPanel>
-                        </Expander>
-                    </materialDesign:Card>
-                    <!-- End Insert Mode card -->
                     <materialDesign:Card Margin="4" Visibility="{Binding ShowFocusStackingLiveView, Converter={StaticResource BooleanToVisibilityConverter1}, Source={x:Static Core:ServiceProvider.Branding}}">
                         <Expander Header="{T:Translate LabelFocusStackingAdvanced}">
                             <Grid Margin="4">
