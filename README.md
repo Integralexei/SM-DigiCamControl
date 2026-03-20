@@ -15,7 +15,6 @@ This edition adds a set of stop motion–specific tools on top of the standard d
 | Filmstrip touchpad scroll | — | ✓ |
 | Capture hotkey (Ctrl+Enter) | — | ✓ |
 | Create Video (working) | broken | ✓ |
-| English UI in Live View | partial | ✓ |
 
 ---
 
@@ -77,7 +76,6 @@ The filmstrip (horizontal frame strip) can be scrolled with a touchpad left/righ
 | Fix | Description |
 |---|---|
 | Onion Skin lag | The original implementation composited all ghost frames in software (CPU Blit) on every live view frame — causing severe lag at any frame rate. Rewritten to load the reference frame once, then control visibility purely via WPF `Image.Opacity`. The GPU handles all blending; the CPU does zero work per live view frame. |
-| Sidebar layout collapse | Opening Motion Guides expander no longer hides NumericUpDown controls or the Capture buttons. |
 | Create Video — no output | `GenerateMp4()` passed two separate `-vf` flags to ffmpeg; ffmpeg 3.x+ treats this as an error and exits without producing output. Fixed by merging both filters into a single `-vf fps=25,scale=W:H` chain. Paths are now also quoted to handle spaces in usernames or session names. |
 | Create Video — 4K codec | 4K preset switched from `libx265` (H.265) to `libx264` (H.264). H.265 requires a paid Windows codec extension; H.264 plays natively on all Windows machines. |
 
