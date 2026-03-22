@@ -15,6 +15,20 @@ This edition adds a set of stop motion–specific tools on top of the standard d
 | Filmstrip touchpad scroll | — | ✓ |
 | Capture hotkey (Ctrl+Enter) | — | ✓ |
 | Create Video (working) | broken | ✓ |
+| English UI in Live View | partial | ✓ |
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes.
+
+---
+
+## Download & Run
+
+1. Go to the [Releases](../../releases) page and download the latest `.zip`
+2. Unzip anywhere
+3. Double-click `run.bat` — or `CameraControl.exe` directly
+4. Requirements: Windows 10/11, .NET Framework 4.8 (included in Windows by default)
+
+> **Camera not required** — you can open Live View in Review Mode to inspect frames from an existing session.
 
 ---
 
@@ -76,8 +90,10 @@ The filmstrip (horizontal frame strip) can be scrolled with a touchpad left/righ
 | Fix | Description |
 |---|---|
 | Onion Skin lag | The original implementation composited all ghost frames in software (CPU Blit) on every live view frame — causing severe lag at any frame rate. Rewritten to load the reference frame once, then control visibility purely via WPF `Image.Opacity`. The GPU handles all blending; the CPU does zero work per live view frame. |
+| Sidebar layout collapse | Opening Motion Guides expander no longer hides NumericUpDown controls or the Capture/Confirm buttons. Root cause: outer column `Width="Auto"` replaced with `Width="*"`. |
 | Create Video — no output | `GenerateMp4()` passed two separate `-vf` flags to ffmpeg; ffmpeg 3.x+ treats this as an error and exits without producing output. Fixed by merging both filters into a single `-vf fps=25,scale=W:H` chain. Paths are now also quoted to handle spaces in usernames or session names. |
 | Create Video — 4K codec | 4K preset switched from `libx265` (H.265) to `libx264` (H.264). H.265 requires a paid Windows codec extension; H.264 plays natively on all Windows machines. |
+| Capture double-press crash | Pressing Capture twice quickly no longer crashes the app. `CaptureInThread` now checks `CaptureInProgress` before spawning a new thread — previously two concurrent threads both called `CameraDevice.CapturePhotoNoAf()`, causing a device-level race condition. |
 
 ---
 
