@@ -20,6 +20,17 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes.
 
 ---
 
+## Download & Run
+
+1. Go to the [Releases](../../releases) page and download the latest `.zip`
+2. Unzip anywhere
+3. Double-click `run.bat` — or `CameraControl.exe` directly
+4. Requirements: Windows 10/11, .NET Framework 4.8 (included in Windows by default)
+
+> **Camera not required** — you can open Live View in Review Mode to inspect frames from an existing session.
+
+---
+
 ## Added Features
 
 ### Onion Skin
