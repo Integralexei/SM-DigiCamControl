@@ -86,7 +86,7 @@ namespace CameraControl.ViewModel
         private readonly object _onionCacheLock = new object();
 
         // Motion guide fields
-        private bool _motionGuidesVisible = true;
+        private bool _motionGuidesVisible = false;
         private bool _motionGuidesDrawMode = false;
 
         private ICameraDevice _cameraDevice;
@@ -3515,6 +3515,8 @@ namespace CameraControl.ViewModel
 
         private void CaptureInThread()
         {
+            if (CaptureInProgress)
+                return;
             var thread = new Thread(()=>Capture());
             thread.Start();
         }

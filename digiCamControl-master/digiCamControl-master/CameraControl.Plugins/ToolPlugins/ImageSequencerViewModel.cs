@@ -492,7 +492,7 @@ namespace CameraControl.Plugins.ToolPlugins
             LoadFramesCommand = new RelayCommand(() => LoadFramesAsync(null), () => !_isLoading);
 
             CreateMovieCommand = new RelayCommand(CreateMovie);
-            Fps = 15;
+            Fps = 24;
             ServiceProvider.Settings.DefaultSession.PropertyChanged += DefaultSession_PropertyChanged;
             RebuildVisibleFiles();
             MinValue = 0;

@@ -83,6 +83,7 @@ The filmstrip (horizontal frame strip below the live view) can be scrolled with 
 | Image Sequencer — video not created | `GenerateMp4()` passed two separate `-vf` flags to ffmpeg; ffmpeg 3.x+ treats this as an error and exits without producing output. Fixed by merging both filters into a single `-vf fps=25,scale=W:H` chain. Paths are now also quoted to handle spaces in usernames or session names. |
 | Image Sequencer — 4K codec | 4K preset switched from `libx265` (H.265) to `libx264` (H.264). H.265 requires a paid Windows codec extension; H.264 plays natively on all Windows machines. |
 | Image Sequencer lag | Reduced lag in the image sequencer panel. |
+| Capture double-press crash | Pressing Capture twice quickly no longer crashes the app. `CaptureInThread` now checks `CaptureInProgress` before spawning a new thread — previously two concurrent threads both called `CameraDevice.CapturePhotoNoAf()`, causing a device-level race condition. |
 
 ---
 
