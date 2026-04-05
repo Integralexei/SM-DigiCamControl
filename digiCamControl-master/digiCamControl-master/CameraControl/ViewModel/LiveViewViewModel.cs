@@ -1670,6 +1670,7 @@ namespace CameraControl.ViewModel
             CaptureGhostPreviewCommand = new RelayCommand(() =>
             {
                 _useNextPreviewAsGhost = true;
+                OnionSkinPosition = -100;   // show ghost at 100% so preview is immediately visible
                 CapturePreview();
             });
 
@@ -2035,6 +2036,12 @@ namespace CameraControl.ViewModel
             {
                 _onionPreviewPending = false;
                 _onionPreviewActive = true;
+                // Cancel any in-flight prev-frame load so it cannot overwrite the ghost
+                lock (_onionCacheLock)
+                {
+                    _onionCacheBuildingKey = null;
+                    _onionSkinLastSelectedThumb = "__preview__";
+                }
                 try
                 {
                     BitmapSource normalized = NormalizeToLiveViewSize(_onionPreviewRaw, targetWidth, targetHeight);
@@ -2085,7 +2092,7 @@ namespace CameraControl.ViewModel
                                     _onionCacheBuildingKey = null;
                             }
                         }
-                        if (succeeded) OnionSkinBitmap = loaded;
+                        if (succeeded && !_onionPreviewActive) OnionSkinBitmap = loaded;
                     }
                 }
             }
