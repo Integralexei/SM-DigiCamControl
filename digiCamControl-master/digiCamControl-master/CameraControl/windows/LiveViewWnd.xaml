@@ -153,7 +153,16 @@
                 <RotateTransform  Angle="{Binding Rotation}" />
             </Image.LayoutTransform>
         </Image>
-        <!-- Onion Skin: prev-frame ghost (visible when slider is left of center) -->
+        <local1:ZoomAndPanControl x:Name="zoomAndPanControl" MouseWheel="zoomAndPanControl_MouseWheel" Grid.Row="0" Grid.RowSpan="4" Grid.Column="2" Style="{StaticResource ZoomStyle}" 
+            ZoneOneVisibility="{Binding PreviewBitmapVisible, Converter={StaticResource BooleanToVisibilityConverter1}}" SizeChanged="zoomAndPanControl_SizeChanged" MouseDoubleClick="zoomAndPanControl_MouseDoubleClick" ClipToBounds="True">
+            <Image x:Name="PreviewBitmap" Stretch="Uniform" Source="{Binding PreviewBitmap}" RenderTransformOrigin="0.5,0.5" Grid.Row="0" Grid.RowSpan="4" Grid.Column="2"
+                Width="{Binding ActualWidth, ElementName=_image}" Height="{Binding ActualHeight, ElementName=_image}" >
+                <Image.LayoutTransform>
+                    <RotateTransform  Angle="{Binding Rotation}" />
+                </Image.LayoutTransform>
+            </Image>
+        </local1:ZoomAndPanControl>
+        <!-- Onion Skin: prev-frame ghost — above preview so ghost overlays the preview image -->
         <Image Grid.Column="2" Grid.RowSpan="4"
                Source="{Binding OnionSkinBitmap}"
                Opacity="{Binding OnionPrevOpacity}"
@@ -164,7 +173,7 @@
                 <RotateTransform Angle="{Binding Rotation}" />
             </Image.LayoutTransform>
         </Image>
-        <!-- Onion Skin: next-frame ghost (visible when slider is right of center) -->
+        <!-- Onion Skin: next-frame ghost — above preview so ghost overlays the preview image -->
         <Image Grid.Column="2" Grid.RowSpan="4"
                Source="{Binding OnionNextBitmap}"
                Opacity="{Binding OnionNextOpacity}"
@@ -175,15 +184,6 @@
                 <RotateTransform Angle="{Binding Rotation}" />
             </Image.LayoutTransform>
         </Image>
-        <local1:ZoomAndPanControl x:Name="zoomAndPanControl" MouseWheel="zoomAndPanControl_MouseWheel" Grid.Row="0" Grid.RowSpan="4" Grid.Column="2" Style="{StaticResource ZoomStyle}" 
-            ZoneOneVisibility="{Binding PreviewBitmapVisible, Converter={StaticResource BooleanToVisibilityConverter1}}" SizeChanged="zoomAndPanControl_SizeChanged" MouseDoubleClick="zoomAndPanControl_MouseDoubleClick" ClipToBounds="True">
-            <Image x:Name="PreviewBitmap" Stretch="Uniform" Source="{Binding PreviewBitmap}" RenderTransformOrigin="0.5,0.5" Grid.Row="0" Grid.RowSpan="4" Grid.Column="2"
-                Width="{Binding ActualWidth, ElementName=_image}" Height="{Binding ActualHeight, ElementName=_image}" >
-                <Image.LayoutTransform>
-                    <RotateTransform  Angle="{Binding Rotation}" />
-                </Image.LayoutTransform>
-            </Image>
-        </local1:ZoomAndPanControl>
         <Button Grid.Row="0" Grid.Column="2" Height="40" Width="40" Margin="10" Style="{DynamicResource MaterialDesignFloatingActionLightButton}" HorizontalAlignment="Center" VerticalAlignment="Top" Command="{Binding ClosePreviewCommand}"
             ToolTip="{T:Translate LabelClosePreview}" Visibility="{Binding PreviewBitmapVisible, Converter={StaticResource BooleanToVisibilityConverter1}}">
             <materialDesign:PackIcon Kind="Close" Height="35" Width="35" />
