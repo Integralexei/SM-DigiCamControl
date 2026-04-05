@@ -65,6 +65,12 @@
                 </TextBlock>
                 <Label Content="{Binding CounterText}" HorizontalContentAlignment="Center"/>
                 <Button Content="{T:TranslateExtension LabelCreateMovie}" Margin="3" Command="{Binding CreateMovieCommand}" IsEnabled="{Binding IsFree}"/>
+                <Button Content="Delete Last Frame" Margin="3,6,3,3" Command="{Binding DeleteLastFrameCommand}" IsEnabled="{Binding IsFree}"
+                        Foreground="White" Background="#C0392B"/>
+                <Button Content="Renumber Sequence" Margin="3,3,3,6"
+                        Command="{Binding RenumberSequenceCommand}"
+                        ToolTip="Rename files on disk to match visual sequence order."
+                        Foreground="White" Background="#2980B9"/>
             </StackPanel>
         </ScrollViewer>
         <ProgressBar Grid.Row="3" Grid.Column="0" Margin="4" Minimum="0" Maximum="{Binding TotalImages}" Value="{Binding CurrentImages, Mode=OneWay}" />

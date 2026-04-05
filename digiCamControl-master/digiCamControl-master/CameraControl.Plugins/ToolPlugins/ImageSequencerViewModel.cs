@@ -3,8 +3,10 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -472,6 +474,9 @@ namespace CameraControl.Plugins.ToolPlugins
 
         public RelayCommand PrevImageCommand2 { get; set; }
         public RelayCommand NextImageCommand2 { get; set; }
+        public RelayCommand DeleteLastFrameCommand { get; set; }
+        public RelayCommand RenumberSequenceCommand { get; set; }
+        private bool _isRenumbering;
 
         public ImageSequencerViewModel()
         {
@@ -492,6 +497,8 @@ namespace CameraControl.Plugins.ToolPlugins
             LoadFramesCommand = new RelayCommand(() => LoadFramesAsync(null), () => !_isLoading);
 
             CreateMovieCommand = new RelayCommand(CreateMovie);
+            DeleteLastFrameCommand = new RelayCommand(DeleteLastFrame, () => _visibleFiles.Count > 0);
+            RenumberSequenceCommand = new RelayCommand(RenumberSequence, () => !_isRenumbering && _visibleFiles.Count > 0);
             Fps = 24;
             ServiceProvider.Settings.DefaultSession.PropertyChanged += DefaultSession_PropertyChanged;
             RebuildVisibleFiles();
@@ -513,6 +520,8 @@ namespace CameraControl.Plugins.ToolPlugins
                 _loadCts?.Cancel();
                 InvalidateRamFrames();
                 PreCacheFramesAsync();
+                DeleteLastFrameCommand?.RaiseCanExecuteChanged();
+                RenumberSequenceCommand?.RaiseCanExecuteChanged();
             }
         }
 
@@ -635,6 +644,172 @@ namespace CameraControl.Plugins.ToolPlugins
             viewmodel.MaxValue = MaxValue;
             window.DataContext = viewmodel;
             window.ShowDialog();
+        }
+
+        private void DeleteLastFrame()
+        {
+            if (_visibleFiles.Count == 0) return;
+            var lastFile = _visibleFiles[_visibleFiles.Count - 1];
+            var result = MessageBox.Show(
+                string.Format("Delete last frame?\n{0}", System.IO.Path.GetFileName(lastFile.FileName)),
+                "Delete Frame",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (result != MessageBoxResult.Yes) return;
+            try
+            {
+                if (System.IO.File.Exists(lastFile.FileName))
+                    System.IO.File.Delete(lastFile.FileName);
+                lastFile.RemoveThumbs();
+                ServiceProvider.Settings.DefaultSession.Files.Remove(lastFile);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex);
+            }
+        }
+
+        private void RenumberSequence()
+        {
+            var files = _visibleFiles.ToList();
+            if (files.Count == 0) return;
+
+            var result = MessageBox.Show(
+                string.Format("Renumber {0} file(s) on disk to match visual sequence order?\n\nThis cannot be undone.", files.Count),
+                "Renumber Sequence",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (result != MessageBoxResult.Yes) return;
+
+            _isRenumbering = true;
+            RenumberSequenceCommand.RaiseCanExecuteChanged();
+            Task.Run(() => DoRenumber(files));
+        }
+
+        private void DoRenumber(List<FileItem> files)
+        {
+            var errors = new List<string>();
+            var session = ServiceProvider.Settings.DefaultSession;
+
+            string firstBase = Path.GetFileNameWithoutExtension(files[0].FileName) ?? "";
+            var m = Regex.Match(firstBase, @"^([A-Za-z_]+)");
+            string prefix = m.Success
+                ? m.Value
+                : Regex.Replace(session.Name, @"[\\/:*?""<>|]", "_").Replace(' ', '_');
+            string folder = Path.GetDirectoryName(files[0].FileName);
+            int digits = session.LeadingZeros > 0 ? session.LeadingZeros : 4;
+            string fmt = "D" + digits;
+
+            var groups = BuildRenameGroups(files, session.RawExtensions);
+
+            // Pass 1: rename all to temp names while old Id is still valid
+            var tempMap = new Dictionary<FileItem, string>();
+            foreach (var group in groups)
+            {
+                foreach (var item in group)
+                {
+                    string tmp = Path.Combine(folder, "__seq_" + Guid.NewGuid().ToString("N") + Path.GetExtension(item.FileName));
+                    try
+                    {
+                        PhotoUtils.WaitForFile(item.FileName);
+                        item.RemoveThumbs();
+                        File.Move(item.FileName, tmp);
+                        tempMap[item] = tmp;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error("RenumberSequence pass1: " + item.FileName, ex);
+                        errors.Add(item.Name);
+                    }
+                }
+            }
+
+            // Pass 2: rename temp names to final sequential names
+            int counter = 1;
+            foreach (var group in groups)
+            {
+                string counterStr = counter.ToString(fmt);
+                foreach (var item in group)
+                {
+                    if (!tempMap.ContainsKey(item)) continue;
+                    string tmp = tempMap[item];
+                    string ext = Path.GetExtension(item.FileName);
+                    string newName = prefix + counterStr + (session.LowerCaseExtension ? ext.ToLower() : ext);
+                    string newPath = Path.Combine(folder, newName);
+
+                    if (File.Exists(newPath) && newPath != tmp)
+                        newPath = Path.Combine(folder, prefix + counterStr + "_" + Guid.NewGuid().ToString("N").Substring(0, 4) + ext);
+
+                    try
+                    {
+                        File.Move(tmp, newPath);
+
+                        if (!string.IsNullOrEmpty(item.BackupFileName) && File.Exists(item.BackupFileName))
+                        {
+                            string newBackup = Path.Combine(Path.GetDirectoryName(item.BackupFileName), newName);
+                            File.Move(item.BackupFileName, newBackup);
+                            item.BackupFileName = newBackup;
+                        }
+
+                        item.SetFile(newPath);
+                        item.Id = 0;  // reset cached Id so LargeThumb/SmallThumb recompute from new FileName
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error("RenumberSequence pass2: " + tmp, ex);
+                        errors.Add(Path.GetFileName(tmp));
+                    }
+                }
+                counter++;
+            }
+
+            try { ServiceProvider.Settings.Save(session); }
+            catch (Exception ex) { Log.Error("RenumberSequence: SaveSession failed", ex); }
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                _isRenumbering = false;
+                RenumberSequenceCommand.RaiseCanExecuteChanged();
+                RebuildVisibleFiles();
+                _frameCache.Clear();
+                InvalidateRamFrames();
+                PreCacheFramesAsync();
+                DeleteLastFrameCommand?.RaiseCanExecuteChanged();
+
+                if (errors.Count > 0)
+                    MessageBox.Show(
+                        "Some files could not be renamed:\n" + string.Join("\n", errors),
+                        "Renumber Sequence",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                else
+                    StaticHelper.Instance.SystemMessage = "Sequence renumbered successfully.";
+            });
+        }
+
+        private List<List<FileItem>> BuildRenameGroups(List<FileItem> files, List<string> rawExts)
+        {
+            var groups = new List<List<FileItem>>();
+            int i = 0;
+            while (i < files.Count)
+            {
+                if (i + 1 < files.Count)
+                {
+                    string baseA = Path.GetFileNameWithoutExtension(files[i].FileName);
+                    string baseB = Path.GetFileNameWithoutExtension(files[i + 1].FileName);
+                    bool aRaw = rawExts.Contains(Path.GetExtension(files[i].FileName).ToLower());
+                    bool bRaw = rawExts.Contains(Path.GetExtension(files[i + 1].FileName).ToLower());
+                    if (baseA == baseB && aRaw != bRaw)
+                    {
+                        groups.Add(new List<FileItem> { files[i], files[i + 1] });
+                        i += 2;
+                        continue;
+                    }
+                }
+                groups.Add(new List<FileItem> { files[i] });
+                i++;
+            }
+            return groups;
         }
     }
 }

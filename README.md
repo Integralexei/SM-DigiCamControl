@@ -12,12 +12,11 @@ This edition adds a set of stop motion–specific tools on top of the standard d
 | Motion Guides (Bezier arcs) | — | ✓ |
 | Review mode (no camera) | — | ✓ |
 | Insert Mode (capture at position) | — | ✓ |
+| Renumber Sequence (fix filename order) | — | ✓ |
 | Filmstrip touchpad scroll | — | ✓ |
 | Capture hotkey (Ctrl+Enter) | — | ✓ |
 | Create Video (working) | broken | ✓ |
 | English UI in Live View | partial | ✓ |
-
-See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes.
 
 ---
 
@@ -63,6 +62,17 @@ Controls where newly captured frames are inserted in the session filmstrip.
 - **OFF**: new frames are appended at the end
 - Toggle button in the filmstrip toolbar (camera+ icon); highlights when active
 - Onion Skin automatically re-anchors to the frame before the selected frame when Insert Mode is ON
+
+### Renumber Sequence
+Renames all files in the session on disk so their filenames match the visual sequence order in the filmstrip.
+
+Available in the **Image Sequencer** window ("Renumber Sequence" button in the sidebar).
+
+- When frames are captured in Insert Mode, their filenames reflect capture order, not visual order. After renaming, `frame_0001.jpg`, `frame_0002.jpg`, … match the filmstrip left-to-right.
+- Two-pass rename (all files → temp names, then → final names) prevents collisions regardless of the original naming.
+- Handles RAW+JPG pairs: both files in a pair get the same counter number.
+- Updates the session file after renaming so the app stays consistent.
+- Shows a confirmation dialog before proceeding (cannot be undone).
 
 ### Review Mode (no camera)
 Allows opening the Live View window even when no camera is connected, so you can inspect the Onion Skin overlay across existing session frames.
