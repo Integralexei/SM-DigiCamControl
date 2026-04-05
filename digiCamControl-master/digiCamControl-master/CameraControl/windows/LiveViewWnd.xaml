@@ -153,10 +153,21 @@
                 <RotateTransform  Angle="{Binding Rotation}" />
             </Image.LayoutTransform>
         </Image>
-        <!-- Onion Skin: ghost overlay (previous frame shown at slider opacity) -->
+        <!-- Onion Skin: prev-frame ghost (visible when slider is left of center) -->
         <Image Grid.Column="2" Grid.RowSpan="4"
                Source="{Binding OnionSkinBitmap}"
-               Opacity="{Binding OnionSkinOpacityNormalized}"
+               Opacity="{Binding OnionPrevOpacity}"
+               Stretch="Uniform"
+               IsHitTestVisible="False"
+               RenderTransformOrigin="0.5,0.5">
+            <Image.LayoutTransform>
+                <RotateTransform Angle="{Binding Rotation}" />
+            </Image.LayoutTransform>
+        </Image>
+        <!-- Onion Skin: next-frame ghost (visible when slider is right of center) -->
+        <Image Grid.Column="2" Grid.RowSpan="4"
+               Source="{Binding OnionNextBitmap}"
+               Opacity="{Binding OnionNextOpacity}"
                Stretch="Uniform"
                IsHitTestVisible="False"
                RenderTransformOrigin="0.5,0.5">
@@ -570,22 +581,31 @@
                                           IsChecked="{Binding OnionSkinEnabled}"
                                           Margin="2"/>
 
-                                <Label Grid.Row="1" Grid.Column="0"
-                                       Content="Ghost %:"
-                                       IsEnabled="{Binding OnionSkinEnabled}"
-                                       Margin="2" Padding="1"/>
-                                <Controls:NumericUpDown Grid.Row="1" Grid.Column="1"
-                                    Minimum="0" Maximum="100"
-                                    Value="{Binding OnionSkinOpacity}"
-                                    IsEnabled="{Binding OnionSkinEnabled}"
-                                    Margin="2" NumericInputMode="Numbers" Speedup="False"/>
-
-                                <Slider Grid.Row="2" Grid.ColumnSpan="2"
-                                        Minimum="0" Maximum="100"
-                                        Value="{Binding OnionSkinOpacity}"
+                                <!-- Ghost slider: −100=prev 100% | −50=prev 50% | 0=live | +50=next 50% | +100=next 100% -->
+                                <Slider Grid.Row="1" Grid.ColumnSpan="2"
+                                        Minimum="-100" Maximum="100"
+                                        Value="{Binding OnionSkinPosition}"
                                         IsEnabled="{Binding OnionSkinEnabled}"
-                                        TickFrequency="10" TickPlacement="BottomRight"
-                                        Margin="2"/>
+                                        IsSnapToTickEnabled="True" TickFrequency="50"
+                                        TickPlacement="BottomRight"
+                                        Margin="2,4,2,0"/>
+                                <Grid Grid.Row="2" Grid.ColumnSpan="2" Margin="2,0,2,4"
+                                      IsEnabled="{Binding OnionSkinEnabled}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="← Prev" FontSize="9"
+                                               Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                               HorizontalAlignment="Left"/>
+                                    <TextBlock Grid.Column="1" Text="Live" FontSize="9"
+                                               Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                               HorizontalAlignment="Center"/>
+                                    <TextBlock Grid.Column="2" Text="Next →" FontSize="9"
+                                               Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                               HorizontalAlignment="Right"/>
+                                </Grid>
 
                                 <Label Grid.Row="3" Grid.Column="0"
                                        Content="Lens corr.:"
@@ -605,7 +625,7 @@
                                         Margin="2"/>
 
                                 <TextBlock Grid.Row="5" Grid.ColumnSpan="2"
-                                           Text="Shows the previous frame (or frame before insert point) as a ghost overlay."
+                                           Text="Prev: frame before insert point. Next: frame at insert point (insert mode only)."
                                            TextWrapping="Wrap" FontSize="10"
                                            Foreground="{DynamicResource MaterialDesignBodyLight}"
                                            Margin="2"/>

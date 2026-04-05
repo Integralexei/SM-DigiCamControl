@@ -79,10 +79,13 @@ namespace CameraControl.ViewModel
 
         // Onion skin fields
         private bool _onionSkinEnabled = false;
-        private int _onionSkinOpacity = 70;
+        // Position: −100..+100. Negative = prev frame ghost; zero = pure camera; positive = next frame ghost.
+        private int _onionSkinPosition = -50;
         // OnionLensK1 is persisted in CameraProperty.LiveviewSettings — no backing field
         private volatile string _onionSkinLastSelectedThumb = null;
         private volatile string _onionCacheBuildingKey = null;
+        private volatile string _onionNextCacheKey = null;
+        private volatile string _onionNextBuildingKey = null;
         private readonly object _onionCacheLock = new object();
 
         // Motion guide fields
@@ -457,19 +460,23 @@ namespace CameraControl.ViewModel
             }
         }
 
-        public int OnionSkinOpacity
+        // −100 = prev frame 100% | −50 = prev 50% | 0 = camera only | +50 = next 50% | +100 = next 100%
+        public int OnionSkinPosition
         {
-            get { return _onionSkinOpacity; }
+            get { return _onionSkinPosition; }
             set
             {
-                _onionSkinOpacity = Math.Max(0, Math.Min(100, value));
-                RaisePropertyChanged(() => OnionSkinOpacity);
-                RaisePropertyChanged(() => OnionSkinOpacityNormalized);
+                _onionSkinPosition = Math.Max(-100, Math.Min(100, value));
+                RaisePropertyChanged(() => OnionSkinPosition);
+                RaisePropertyChanged(() => OnionPrevOpacity);
+                RaisePropertyChanged(() => OnionNextOpacity);
             }
         }
 
-        // Ghost opacity: 0 = invisible, 1 = fully visible
-        public double OnionSkinOpacityNormalized => _onionSkinOpacity / 100.0;
+        // Prev-frame ghost opacity (0–1). Non-zero only when position < 0.
+        public double OnionPrevOpacity => _onionSkinPosition < 0 ? (-_onionSkinPosition) / 100.0 : 0.0;
+        // Next-frame ghost opacity (0–1). Non-zero only when position > 0.
+        public double OnionNextOpacity => _onionSkinPosition > 0 ? _onionSkinPosition / 100.0 : 0.0;
 
         // Lens distortion correction stored in LiveviewSettings (persisted per camera).
         // Range −50..50; actual k1 = value / 300.0  (step ≈ 0.0033 — 3× finer than before)
@@ -489,6 +496,13 @@ namespace CameraControl.ViewModel
         {
             get { return _onionSkinBitmap; }
             private set { _onionSkinBitmap = value; RaisePropertyChanged(() => OnionSkinBitmap); }
+        }
+
+        private BitmapSource _onionNextBitmap;
+        public BitmapSource OnionNextBitmap
+        {
+            get { return _onionNextBitmap; }
+            private set { _onionNextBitmap = value; RaisePropertyChanged(() => OnionNextBitmap); }
         }
 
         // --- End Onion Skin properties ---
@@ -1964,8 +1978,11 @@ namespace CameraControl.ViewModel
             {
                 _onionSkinLastSelectedThumb = null;
                 _onionCacheBuildingKey = null;
+                _onionNextCacheKey = null;
+                _onionNextBuildingKey = null;
             }
             OnionSkinBitmap = null;
+            OnionNextBitmap = null;
         }
 
         private void UpdateOnionCacheIfNeeded(int targetWidth, int targetHeight)
@@ -1974,10 +1991,12 @@ namespace CameraControl.ViewModel
             var files = ServiceProvider.Settings.DefaultSession?.Files?.ToList();
             if (files == null || files.Count == 0) return;
 
-            // Determine reference frame (the single ghost shown under live view):
-            //   - Insert mode ON + orange frame at index i > 0: frame immediately before it
-            //   - Everything else: last frame in session
-            FileItem refItem = null;
+            // Determine prev and next reference frames:
+            //   Insert mode ON + orange frame at index i:
+            //     prev = files[i-1] (null if i == 0), next = files[i] (the insert-point frame itself)
+            //   Otherwise:
+            //     prev = last frame in session, next = null
+            FileItem prevItem = null, nextItem = null;
             bool insertModeWithPoint = false;
             if (ServiceProvider.Settings.InsertMode)
             {
@@ -1986,63 +2005,114 @@ namespace CameraControl.ViewModel
                 {
                     insertModeWithPoint = true;
                     int idx = files.IndexOf(insertItem);
-                    refItem = idx > 0 ? files[idx - 1] : null; // null if insert point is first frame
+                    prevItem = idx > 0 ? files[idx - 1] : null;
+                    nextItem = files[idx]; // insert-point frame is the "next" frame
                 }
             }
             if (!insertModeWithPoint)
-                refItem = files[files.Count - 1];
-            if (refItem == null) return; // insert point is first frame — nothing to show
+                prevItem = files[files.Count - 1];
 
-            string currentKey = refItem.FileName;
-            if (string.IsNullOrEmpty(currentKey)) return;
-
-            // Fast path: cache already valid (volatile read, no lock)
-            if (_onionSkinLastSelectedThumb == currentKey) return;
-
-            // Atomic check-and-reserve: ensure only ONE timer task does the load
-            bool shouldLoad = false;
-            lock (_onionCacheLock)
+            // --- Update prev frame cache ---
+            if (prevItem != null)
             {
-                if (_onionSkinLastSelectedThumb != currentKey && _onionCacheBuildingKey != currentKey)
+                string prevKey = prevItem.FileName;
+                if (!string.IsNullOrEmpty(prevKey) && _onionSkinLastSelectedThumb != prevKey)
                 {
-                    _onionCacheBuildingKey = currentKey;
-                    shouldLoad = true;
-                }
-            }
-            if (!shouldLoad) return;
-
-            BitmapSource loaded = null;
-            bool succeeded = false;
-            try
-            {
-                // File I/O outside the lock
-                loaded = LoadOnionFrame(refItem.LargeThumb, refItem.FileName, targetWidth);
-
-                lock (_onionCacheLock)
-                {
-                    if (_onionCacheBuildingKey == currentKey)
+                    bool shouldLoad = false;
+                    lock (_onionCacheLock)
                     {
-                        _onionSkinLastSelectedThumb = currentKey;
-                        _onionCacheBuildingKey = null;
-                        succeeded = loaded != null;
+                        if (_onionSkinLastSelectedThumb != prevKey && _onionCacheBuildingKey != prevKey)
+                        {
+                            _onionCacheBuildingKey = prevKey;
+                            shouldLoad = true;
+                        }
+                    }
+                    if (shouldLoad)
+                    {
+                        BitmapSource loaded = null;
+                        bool succeeded = false;
+                        try
+                        {
+                            loaded = LoadOnionFrame(prevItem.LargeThumb, prevItem.FileName, targetWidth);
+                            lock (_onionCacheLock)
+                            {
+                                if (_onionCacheBuildingKey == prevKey)
+                                {
+                                    _onionSkinLastSelectedThumb = prevKey;
+                                    _onionCacheBuildingKey = null;
+                                    succeeded = loaded != null;
+                                }
+                            }
+                        }
+                        catch (Exception ex) { Log.Error("Onion skin prev build error", ex); }
+                        finally
+                        {
+                            lock (_onionCacheLock)
+                            {
+                                if (_onionCacheBuildingKey == prevKey)
+                                    _onionCacheBuildingKey = null;
+                            }
+                        }
+                        if (succeeded) OnionSkinBitmap = loaded;
                     }
                 }
             }
-            catch (Exception ex)
+            else
             {
-                Log.Error("Onion skin build error", ex);
-            }
-            finally
-            {
-                lock (_onionCacheLock)
-                {
-                    if (_onionCacheBuildingKey == currentKey)
-                        _onionCacheBuildingKey = null;
-                }
+                if (OnionSkinBitmap != null) OnionSkinBitmap = null;
+                lock (_onionCacheLock) { _onionSkinLastSelectedThumb = null; }
             }
 
-            if (succeeded)
-                OnionSkinBitmap = loaded;
+            // --- Update next frame cache ---
+            if (nextItem != null)
+            {
+                string nextKey = nextItem.FileName;
+                if (!string.IsNullOrEmpty(nextKey) && _onionNextCacheKey != nextKey)
+                {
+                    bool shouldLoad = false;
+                    lock (_onionCacheLock)
+                    {
+                        if (_onionNextCacheKey != nextKey && _onionNextBuildingKey != nextKey)
+                        {
+                            _onionNextBuildingKey = nextKey;
+                            shouldLoad = true;
+                        }
+                    }
+                    if (shouldLoad)
+                    {
+                        BitmapSource loaded = null;
+                        bool succeeded = false;
+                        try
+                        {
+                            loaded = LoadOnionFrame(nextItem.LargeThumb, nextItem.FileName, targetWidth);
+                            lock (_onionCacheLock)
+                            {
+                                if (_onionNextBuildingKey == nextKey)
+                                {
+                                    _onionNextCacheKey = nextKey;
+                                    _onionNextBuildingKey = null;
+                                    succeeded = loaded != null;
+                                }
+                            }
+                        }
+                        catch (Exception ex) { Log.Error("Onion skin next build error", ex); }
+                        finally
+                        {
+                            lock (_onionCacheLock)
+                            {
+                                if (_onionNextBuildingKey == nextKey)
+                                    _onionNextBuildingKey = null;
+                            }
+                        }
+                        if (succeeded) OnionNextBitmap = loaded;
+                    }
+                }
+            }
+            else
+            {
+                if (OnionNextBitmap != null) OnionNextBitmap = null;
+                lock (_onionCacheLock) { _onionNextCacheKey = null; }
+            }
         }
 
         private BitmapSource LoadOnionFrame(string thumbPath, string fallbackPath, int decodeWidth)
