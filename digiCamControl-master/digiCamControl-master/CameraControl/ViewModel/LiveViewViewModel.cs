@@ -2033,7 +2033,7 @@ namespace CameraControl.ViewModel
                         bool succeeded = false;
                         try
                         {
-                            loaded = LoadOnionFrame(prevItem.LargeThumb, prevItem.FileName, targetWidth);
+                            loaded = LoadOnionFrame(prevItem.LargeThumb, prevItem.FileName, targetWidth, targetHeight);
                             lock (_onionCacheLock)
                             {
                                 if (_onionCacheBuildingKey == prevKey)
@@ -2084,7 +2084,7 @@ namespace CameraControl.ViewModel
                         bool succeeded = false;
                         try
                         {
-                            loaded = LoadOnionFrame(nextItem.LargeThumb, nextItem.FileName, targetWidth);
+                            loaded = LoadOnionFrame(nextItem.LargeThumb, nextItem.FileName, targetWidth, targetHeight);
                             lock (_onionCacheLock)
                             {
                                 if (_onionNextBuildingKey == nextKey)
@@ -2115,7 +2115,7 @@ namespace CameraControl.ViewModel
             }
         }
 
-        private BitmapSource LoadOnionFrame(string thumbPath, string fallbackPath, int decodeWidth)
+        private BitmapSource LoadOnionFrame(string thumbPath, string fallbackPath, int targetWidth, int targetHeight)
         {
             try
             {
@@ -2129,7 +2129,7 @@ namespace CameraControl.ViewModel
                 if (pathToLoad == null) return null;
 
                 BitmapImage bitmapSource = new BitmapImage();
-                bitmapSource.DecodePixelWidth = decodeWidth;
+                bitmapSource.DecodePixelWidth = targetWidth;
                 bitmapSource.BeginInit();
                 bitmapSource.UriSource = new Uri(pathToLoad);
                 bitmapSource.CacheOption = BitmapCacheOption.OnLoad;
@@ -2138,21 +2138,58 @@ namespace CameraControl.ViewModel
 
                 // Apply lens distortion correction if needed (runs once at cache build time)
                 int lensK1 = CameraProperty.LiveviewSettings.OnionLensK1;
+                BitmapSource result = bitmapSource;
                 if (lensK1 != 0)
                 {
                     var wb = BitmapFactory.ConvertToPbgra32Format(bitmapSource);
                     wb = ApplyRadialUndistort(wb, lensK1 / 300.0);
                     wb.Freeze();
-                    return wb;
+                    result = wb;
                 }
 
-                return bitmapSource;
+                // Normalize to the live view bitmap's exact dimensions.
+                // DecodePixelWidth is a hint — the JPEG decoder may snap to MCU boundaries
+                // (multiples of 8), producing a slightly different height than expected.
+                // Any pixel-size mismatch causes Stretch=Uniform to letter/pillarbox the two
+                // images differently, creating visible edge gaps in the overlay.
+                result = NormalizeToLiveViewSize(result, targetWidth, targetHeight);
+
+                if (!result.IsFrozen) result.Freeze();
+                return result;
             }
             catch (Exception ex)
             {
                 Log.Error("Onion skin frame load error: " + thumbPath, ex);
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Scales and center-crops <paramref name="src"/> to exactly
+        /// <paramref name="targetW"/> × <paramref name="targetH"/> pixels.
+        /// Uses fill-scale (crop excess) so the content fills the target area edge-to-edge,
+        /// matching how the live view WriteableBitmap fills the same WPF Image element.
+        /// Works on any thread (TransformedBitmap + CroppedBitmap are thread-safe).
+        /// </summary>
+        private static BitmapSource NormalizeToLiveViewSize(BitmapSource src, int targetW, int targetH)
+        {
+            if (src.PixelWidth == targetW && src.PixelHeight == targetH)
+                return src;
+
+            // Scale to fill: use the larger scale factor so both dimensions meet or exceed target.
+            double scaleX = (double)targetW / src.PixelWidth;
+            double scaleY = (double)targetH / src.PixelHeight;
+            double scale  = Math.Max(scaleX, scaleY);
+
+            var scaled = new TransformedBitmap(src, new System.Windows.Media.ScaleTransform(scale, scale));
+
+            // Center-crop to exact target size.
+            int cropX = Math.Max(0, (scaled.PixelWidth  - targetW) / 2);
+            int cropY = Math.Max(0, (scaled.PixelHeight - targetH) / 2);
+            int cropW = Math.Min(targetW,  scaled.PixelWidth  - cropX);
+            int cropH = Math.Min(targetH, scaled.PixelHeight - cropY);
+
+            return new CroppedBitmap(scaled, new System.Windows.Int32Rect(cropX, cropY, cropW, cropH));
         }
 
         /// <summary>
