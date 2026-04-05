@@ -86,6 +86,9 @@ namespace CameraControl.ViewModel
         private volatile string _onionNextCacheKey = null;
         private volatile string _onionNextBuildingKey = null;
         private readonly object _onionCacheLock = new object();
+        // Last dimensions used for ghost normalization — if they change, cache is rebuilt
+        private int _onionLastTargetWidth = 0;
+        private int _onionLastTargetHeight = 0;
 
         // Motion guide fields
         private bool _motionGuidesVisible = false;
@@ -1976,6 +1979,31 @@ namespace CameraControl.ViewModel
 
         private void UpdateOnionCacheIfNeeded(int targetWidth, int targetHeight)
         {
+            // When a preview image is covering the live view, normalize ghost frames to
+            // the preview's pixel dimensions so Stretch=Uniform aligns them correctly.
+            var previewBmp = PreviewBitmapVisible ? PreviewBitmap : null;
+            if (previewBmp != null)
+            {
+                targetWidth  = previewBmp.PixelWidth;
+                targetHeight = previewBmp.PixelHeight;
+            }
+
+            // If the effective target dimensions changed (e.g. preview appeared/disappeared),
+            // invalidate the cache so ghosts are rebuilt at the new size.
+            if (targetWidth != _onionLastTargetWidth || targetHeight != _onionLastTargetHeight)
+            {
+                lock (_onionCacheLock)
+                {
+                    _onionSkinLastSelectedThumb = null;
+                    _onionCacheBuildingKey      = null;
+                    _onionNextCacheKey          = null;
+                    _onionNextBuildingKey       = null;
+                }
+                _onionLastTargetWidth  = targetWidth;
+                _onionLastTargetHeight = targetHeight;
+                // Keep existing bitmaps visible while new ones load — no flash to blank
+            }
+
             // Snapshot the files list to avoid race conditions
             var files = ServiceProvider.Settings.DefaultSession?.Files?.ToList();
             if (files == null || files.Count == 0) return;
