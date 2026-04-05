@@ -15,6 +15,7 @@ This edition adds a set of stop motion–specific tools on top of the standard d
 | Renumber Sequence (fix filename order) | — | ✓ |
 | Filmstrip touchpad scroll | — | ✓ |
 | Capture hotkey (Ctrl+Enter) | — | ✓ |
+| Capture Ghost Preview (onion skin) | — | ✓ |
 | Create Video (working) | broken | ✓ |
 | English UI in Live View | partial | ✓ |
 
@@ -73,6 +74,14 @@ Available in the **Image Sequencer** window ("Renumber Sequence" button in the s
 - Handles RAW+JPG pairs: both files in a pair get the same counter number.
 - Updates the session file after renaming so the app stays consistent.
 - Shows a confirmation dialog before proceeding (cannot be undone).
+
+### Capture Ghost Preview
+Takes a full-quality preview shot (not saved to the session) and loads it directly into the Onion Skin ghost overlay.
+
+- **"Capture Ghost Preview"** button in the Onion Skin card (enabled when Onion Skin is on)
+- The preview is normalized to the live view dimensions and displayed at the current ghost opacity — no full-screen blocking overlay
+- Useful when you want to compare a precise reference shot against the live view without committing a frame to the filmstrip
+- The ghost is cleared automatically when the insert point changes or Onion Skin is turned off
 
 ### Review Mode (no camera)
 Allows opening the Live View window even when no camera is connected, so you can inspect the Onion Skin overlay across existing session frames.

@@ -86,6 +86,11 @@ namespace CameraControl.ViewModel
         private volatile string _onionNextCacheKey = null;
         private volatile string _onionNextBuildingKey = null;
         private readonly object _onionCacheLock = new object();
+        // Ghost preview fields (routes a preview capture into the onion skin instead of the full-screen overlay)
+        private volatile bool _useNextPreviewAsGhost = false;
+        private volatile BitmapSource _onionPreviewRaw = null;
+        private volatile bool _onionPreviewPending = false;
+        private volatile bool _onionPreviewActive = false;
 
         // Motion guide fields
         private bool _motionGuidesVisible = false;
@@ -1444,6 +1449,7 @@ namespace CameraControl.ViewModel
         public RelayCommand FullScreenCommand { get; set; }
 
         public RelayCommand ClosePreviewCommand { get; set; }
+        public RelayCommand CaptureGhostPreviewCommand { get; set; }
 
         public RelayCommand CaptureSnapshotCommand { get; set; }
 
@@ -1661,6 +1667,12 @@ namespace CameraControl.ViewModel
                 PreviewBitmapVisible = false;
             });
 
+            CaptureGhostPreviewCommand = new RelayCommand(() =>
+            {
+                _useNextPreviewAsGhost = true;
+                CapturePreview();
+            });
+
             CaptureSnapshotCommand=new RelayCommand(CaptureSnapshot);
 
             ToggleGuideDrawModeCommand = new RelayCommand(() => MotionGuidesDrawMode = !MotionGuidesDrawMode);
@@ -1718,21 +1730,38 @@ namespace CameraControl.ViewModel
 
         void LiveViewManager_PreviewCaptured(ICameraDevice cameraDevice, string file)
         {
-            // the preview was captured with a another camera
+            // the preview was captured with another camera
             if (cameraDevice != CameraDevice)
                 return;
             try
             {
                 if (File.Exists(file))
                 {
-                    PreviewBitmap = BitmapLoader.Instance.LoadImage(file, 2048, 0);
-                    LiveViewManager.OnPreviewLoaded(CameraDevice, file);
-                    File.Delete(file);
+                    if (_useNextPreviewAsGhost)
+                    {
+                        // Route to onion skin instead of the full-screen overlay
+                        _useNextPreviewAsGhost = false;
+                        var bmp = new BitmapImage();
+                        bmp.BeginInit();
+                        bmp.UriSource = new Uri(file);
+                        bmp.CacheOption = BitmapCacheOption.OnLoad;
+                        bmp.EndInit();
+                        bmp.Freeze();
+                        _onionPreviewRaw = bmp;
+                        _onionPreviewPending = true;
+                        File.Delete(file);
+                    }
+                    else
+                    {
+                        PreviewBitmap = BitmapLoader.Instance.LoadImage(file, 2048, 0);
+                        LiveViewManager.OnPreviewLoaded(CameraDevice, file);
+                        File.Delete(file);
+                    }
                 }
             }
             catch (Exception ex)
             {
-                Log.Debug("Preview werror", ex);
+                Log.Debug("Preview error", ex);
             }
         }
 
@@ -1967,6 +1996,9 @@ namespace CameraControl.ViewModel
                 _onionNextCacheKey = null;
                 _onionNextBuildingKey = null;
             }
+            _onionPreviewRaw = null;
+            _onionPreviewPending = false;
+            _onionPreviewActive = false;
             OnionSkinBitmap = null;
             OnionNextBitmap = null;
         }
@@ -1998,8 +2030,22 @@ namespace CameraControl.ViewModel
             if (!insertModeWithPoint)
                 prevItem = files[files.Count - 1];
 
-            // --- Update prev frame cache ---
-            if (prevItem != null)
+            // --- Handle pending ghost preview (routes a Preview capture into the onion skin) ---
+            if (_onionPreviewPending && _onionPreviewRaw != null)
+            {
+                _onionPreviewPending = false;
+                _onionPreviewActive = true;
+                try
+                {
+                    BitmapSource normalized = NormalizeToLiveViewSize(_onionPreviewRaw, targetWidth, targetHeight);
+                    if (!normalized.IsFrozen) normalized.Freeze();
+                    OnionSkinBitmap = normalized;
+                }
+                catch (Exception ex) { Log.Error("Ghost preview normalize error", ex); }
+            }
+
+            // --- Update prev frame cache (skipped when a ghost preview is active) ---
+            if (!_onionPreviewActive && prevItem != null)
             {
                 string prevKey = prevItem.FileName;
                 if (!string.IsNullOrEmpty(prevKey) && _onionSkinLastSelectedThumb != prevKey)
@@ -2043,8 +2089,9 @@ namespace CameraControl.ViewModel
                     }
                 }
             }
-            else
+            else if (!_onionPreviewActive)
             {
+                // No prev item and no ghost preview — clear the ghost
                 if (OnionSkinBitmap != null) OnionSkinBitmap = null;
                 lock (_onionCacheLock) { _onionSkinLastSelectedThumb = null; }
             }

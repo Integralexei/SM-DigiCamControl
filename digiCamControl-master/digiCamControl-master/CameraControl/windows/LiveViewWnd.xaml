@@ -572,6 +572,7 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <CheckBox Grid.Row="0" Grid.ColumnSpan="2"
@@ -610,6 +611,13 @@
                                            TextWrapping="Wrap" FontSize="10"
                                            Foreground="{DynamicResource MaterialDesignBodyLight}"
                                            Margin="2"/>
+
+                                <!-- Capture a preview shot and use it as the ghost instead of a session frame -->
+                                <Button Grid.Row="4" Grid.ColumnSpan="2"
+                                        Content="Capture Ghost Preview"
+                                        Command="{Binding CaptureGhostPreviewCommand}"
+                                        IsEnabled="{Binding OnionSkinEnabled}"
+                                        Margin="2,4,2,2"/>
                             </Grid>
                         </Expander>
                     </materialDesign:Card>
