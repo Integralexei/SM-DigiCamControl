@@ -260,8 +260,6 @@ namespace CameraControl.Core.Classes
         public int CaptureCount { get; set; }
         public int CaptureDelay { get; set; }
 
-        public int OnionLensK1 { get; set; }
-
         public LiveviewSettings()
         {
             GridVisible = false;

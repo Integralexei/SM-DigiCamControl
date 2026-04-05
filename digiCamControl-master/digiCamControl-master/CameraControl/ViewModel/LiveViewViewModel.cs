@@ -81,7 +81,6 @@ namespace CameraControl.ViewModel
         private bool _onionSkinEnabled = false;
         // Position: −100..+100. Negative = prev frame ghost; zero = pure camera; positive = next frame ghost.
         private int _onionSkinPosition = -50;
-        // OnionLensK1 is persisted in CameraProperty.LiveviewSettings — no backing field
         private volatile string _onionSkinLastSelectedThumb = null;
         private volatile string _onionCacheBuildingKey = null;
         private volatile string _onionNextCacheKey = null;
@@ -477,19 +476,6 @@ namespace CameraControl.ViewModel
         public double OnionPrevOpacity => _onionSkinPosition < 0 ? (-_onionSkinPosition) / 100.0 : 0.0;
         // Next-frame ghost opacity (0–1). Non-zero only when position > 0.
         public double OnionNextOpacity => _onionSkinPosition > 0 ? _onionSkinPosition / 100.0 : 0.0;
-
-        // Lens distortion correction stored in LiveviewSettings (persisted per camera).
-        // Range −50..50; actual k1 = value / 300.0  (step ≈ 0.0033 — 3× finer than before)
-        public int OnionLensK1
-        {
-            get { return CameraProperty.LiveviewSettings.OnionLensK1; }
-            set
-            {
-                CameraProperty.LiveviewSettings.OnionLensK1 = Math.Max(-50, Math.Min(50, value));
-                RaisePropertyChanged(() => OnionLensK1);
-                InvalidateOnionCache();
-            }
-        }
 
         private BitmapSource _onionSkinBitmap;
         public BitmapSource OnionSkinBitmap
@@ -2136,23 +2122,12 @@ namespace CameraControl.ViewModel
                 bitmapSource.EndInit();
                 bitmapSource.Freeze();
 
-                // Apply lens distortion correction if needed (runs once at cache build time)
-                int lensK1 = CameraProperty.LiveviewSettings.OnionLensK1;
-                BitmapSource result = bitmapSource;
-                if (lensK1 != 0)
-                {
-                    var wb = BitmapFactory.ConvertToPbgra32Format(bitmapSource);
-                    wb = ApplyRadialUndistort(wb, lensK1 / 300.0);
-                    wb.Freeze();
-                    result = wb;
-                }
-
                 // Normalize to the live view bitmap's exact dimensions.
                 // DecodePixelWidth is a hint — the JPEG decoder may snap to MCU boundaries
                 // (multiples of 8), producing a slightly different height than expected.
                 // Any pixel-size mismatch causes Stretch=Uniform to letter/pillarbox the two
                 // images differently, creating visible edge gaps in the overlay.
-                result = NormalizeToLiveViewSize(result, targetWidth, targetHeight);
+                BitmapSource result = NormalizeToLiveViewSize(bitmapSource, targetWidth, targetHeight);
 
                 if (!result.IsFrozen) result.Freeze();
                 return result;
@@ -2190,65 +2165,6 @@ namespace CameraControl.ViewModel
             int cropH = Math.Min(targetH, scaled.PixelHeight - cropY);
 
             return new CroppedBitmap(scaled, new System.Windows.Int32Rect(cropX, cropY, cropW, cropH));
-        }
-
-        /// <summary>
-        /// Remaps pixels of src to correct radial lens distortion.
-        /// k1 > 0 corrects barrel distortion; k1 < 0 corrects pincushion.
-        /// Runs once during onion cache build (not per live-view frame).
-        /// </summary>
-        private static unsafe WriteableBitmap ApplyRadialUndistort(WriteableBitmap src, double k1)
-        {
-            int w = src.PixelWidth;
-            int h = src.PixelHeight;
-            var dst = BitmapFactory.New(w, h);
-
-            double cx = w * 0.5;
-            double cy = h * 0.5;
-            // Normalise so that the half-diagonal maps to r = 1
-            double scale = Math.Sqrt(cx * cx + cy * cy);
-
-            using (var dstCtx = dst.GetBitmapContext())
-            using (var srcCtx = src.GetBitmapContext(ReadWriteMode.ReadOnly))
-            {
-                int* sp = srcCtx.Pixels;
-                int* dp = dstCtx.Pixels;
-
-                for (int y = 0; y < h; y++)
-                {
-                    for (int x = 0; x < w; x++)
-                    {
-                        double xn = (x - cx) / scale;
-                        double yn = (y - cy) / scale;
-                        double r2 = xn * xn + yn * yn;
-                        // Forward model: distorted = undistorted * (1 + k1*r²)
-                        // We use it as inverse map: sample src at the distorted location
-                        double factor = 1.0 + k1 * r2;
-                        double xs = xn * factor * scale + cx;
-                        double ys = yn * factor * scale + cy;
-
-                        int x0 = (int)xs, y0 = (int)ys;
-                        if (x0 < 0 || x0 >= w - 1 || y0 < 0 || y0 >= h - 1) continue;
-
-                        double fx = xs - x0, fy = ys - y0;
-                        double ifx = 1.0 - fx, ify = 1.0 - fy;
-
-                        int p00 = sp[y0 * w + x0];
-                        int p10 = sp[y0 * w + x0 + 1];
-                        int p01 = sp[(y0 + 1) * w + x0];
-                        int p11 = sp[(y0 + 1) * w + x0 + 1];
-
-                        // PBGRA32 packed as int: A=bits31-24, R=bits23-16, G=bits15-8, B=bits7-0
-                        byte b = (byte)((p00 & 0xFF) * ifx * ify + (p10 & 0xFF) * fx * ify + (p01 & 0xFF) * ifx * fy + (p11 & 0xFF) * fx * fy);
-                        byte g = (byte)(((p00 >> 8) & 0xFF) * ifx * ify + ((p10 >> 8) & 0xFF) * fx * ify + ((p01 >> 8) & 0xFF) * ifx * fy + ((p11 >> 8) & 0xFF) * fx * fy);
-                        byte r = (byte)(((p00 >> 16) & 0xFF) * ifx * ify + ((p10 >> 16) & 0xFF) * fx * ify + ((p01 >> 16) & 0xFF) * ifx * fy + ((p11 >> 16) & 0xFF) * fx * fy);
-                        byte a = (byte)(((p00 >> 24) & 0xFF) * ifx * ify + ((p10 >> 24) & 0xFF) * fx * ify + ((p01 >> 24) & 0xFF) * ifx * fy + ((p11 >> 24) & 0xFF) * fx * fy);
-
-                        dp[y * w + x] = (a << 24) | (r << 16) | (g << 8) | b;
-                    }
-                }
-            }
-            return dst;
         }
 
         // --- End Onion Skin cache methods ---

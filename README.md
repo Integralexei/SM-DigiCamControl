@@ -44,7 +44,7 @@ Overlays the previous frame as a semi-transparent ghost image on top of the live
 - Opacity slider (0–100%): controls ghost visibility via WPF GPU compositing — zero per-frame CPU cost
 - Cache is rebuilt only when the reference frame changes
 - Fallback: loads from original photo path if thumbnail is missing
-- Lens distortion correction (barrel/pincushion, ±50 units) — applied once at cache build time
+- Pixel-perfect alignment: the loaded frame is normalized to the exact live view bitmap dimensions, compensating for JPEG MCU-boundary rounding that would otherwise cause a 1–3 px edge gap
 
 ### Motion Guides
 Quadratic Bezier arcs drawn as canvas overlays on the live view. Used to plan and visualize character movement paths.

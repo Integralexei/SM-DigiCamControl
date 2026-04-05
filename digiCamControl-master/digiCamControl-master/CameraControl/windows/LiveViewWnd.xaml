@@ -572,8 +572,6 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <CheckBox Grid.Row="0" Grid.ColumnSpan="2"
@@ -607,24 +605,7 @@
                                                HorizontalAlignment="Right"/>
                                 </Grid>
 
-                                <Label Grid.Row="3" Grid.Column="0"
-                                       Content="Lens corr.:"
-                                       IsEnabled="{Binding OnionSkinEnabled}"
-                                       Margin="2" Padding="1"/>
-                                <Controls:NumericUpDown Grid.Row="3" Grid.Column="1"
-                                    Minimum="-50" Maximum="50"
-                                    Value="{Binding OnionLensK1}"
-                                    IsEnabled="{Binding OnionSkinEnabled}"
-                                    Margin="2" NumericInputMode="Numbers" Speedup="False"/>
-
-                                <Slider Grid.Row="4" Grid.ColumnSpan="2"
-                                        Minimum="-50" Maximum="50"
-                                        Value="{Binding OnionLensK1}"
-                                        IsEnabled="{Binding OnionSkinEnabled}"
-                                        TickFrequency="10" TickPlacement="BottomRight"
-                                        Margin="2"/>
-
-                                <TextBlock Grid.Row="5" Grid.ColumnSpan="2"
+                                <TextBlock Grid.Row="3" Grid.ColumnSpan="2"
                                            Text="Prev: frame before insert point. Next: frame at insert point (insert mode only)."
                                            TextWrapping="Wrap" FontSize="10"
                                            Foreground="{DynamicResource MaterialDesignBodyLight}"
