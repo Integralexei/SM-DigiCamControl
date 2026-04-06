@@ -137,6 +137,10 @@ namespace CameraControl.Core.Classes
             }
         }
 
+        [XmlIgnore]
+        [JsonIgnore]
+        public bool IsCameraPlaceholder { get; set; }
+
         private bool _isInsertPoint = false;
 
         [XmlIgnore]

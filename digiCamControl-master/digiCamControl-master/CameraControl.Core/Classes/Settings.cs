@@ -1256,6 +1256,7 @@ namespace CameraControl.Core.Classes
                 }
                 //session.Files = new AsyncObservableCollection<FileItem>(session.Files.OrderBy(x => x.FileDate));
                 Log.Debug("Session loaded. Item number: " + session.Files.Count(x => x.Visible));
+                session.EnsureCameraPlaceholder();
             }
             catch (Exception exception)
             {

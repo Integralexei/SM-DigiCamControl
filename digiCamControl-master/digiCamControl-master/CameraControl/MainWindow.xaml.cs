@@ -667,7 +667,10 @@ namespace CameraControl
                     _selectedItem.RemoveThumbs();
                     var insertPoint = ServiceProvider.Settings.DefaultSession.Files.FirstOrDefault(f => f.IsInsertPoint);
                     if (ServiceProvider.Settings.InsertMode && insertPoint != null)
+                    {
                         session.InsertBefore(insertPoint, _selectedItem);
+                        session.MoveCameraPlaceholder();
+                    }
                     else
                         session.Add(_selectedItem);
                     ServiceProvider.OnFileTransfered(_selectedItem);

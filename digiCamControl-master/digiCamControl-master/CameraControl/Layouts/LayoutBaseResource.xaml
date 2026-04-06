@@ -76,7 +76,24 @@
                     <materialDesign:Card Margin="3,4" >
                         <Grid >
                             <!--<Line Stroke="Green" StrokeThickness="4" VerticalAlignment="Bottom" HorizontalAlignment="Stretch" X2="{Binding ActualWidth, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType=Grid}}" Visibility="{Binding Alternate, Converter={StaticResource BooleanToVisibilityConverter}}" Opacity="0.5"/>-->
-                            <StackPanel Orientation="Horizontal">
+                            <!-- Camera placeholder tile (visible only when IsCameraPlaceholder=True) -->
+                            <Grid Name="_cameraPanel"
+                                  Visibility="Collapsed"
+                                  Width="{Binding Source={x:Static Member=Core:ServiceProvider.Settings}, Path=ThumbHeigh}"
+                                  Height="{Binding Source={x:Static Member=Core:ServiceProvider.Settings}, Path=ThumbHeigh}">
+                                <Border Background="#2A2A2A" CornerRadius="4"/>
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <materialDesign:PackIcon Kind="Camera"
+                                                             Width="44" Height="44"
+                                                             Foreground="#666666"
+                                                             HorizontalAlignment="Center"/>
+                                    <TextBlock Text="LIVE"
+                                               FontSize="9" FontWeight="Bold" Foreground="#555555"
+                                               HorizontalAlignment="Center" Margin="0,3,0,0"
+                                               FontFamily="Segoe UI"/>
+                                </StackPanel>
+                            </Grid>
+                            <StackPanel Name="_contentPanel" Orientation="Horizontal">
                                 <Grid Height="{Binding Source={x:Static Member=Core:ServiceProvider.Settings}, Path=ThumbHeigh}" Margin="4,4,4,4">
                                     <!--<Rectangle Stroke="Black" Margin="0"/>
                             <Rectangle Stroke="Black" Margin="2" />-->
@@ -151,6 +168,10 @@
                             <Setter TargetName="_Rectangle" Property="Stroke" Value="Orange"/>
                             <Setter TargetName="_Rectangle" Property="StrokeThickness" Value="3"/>
                         </MultiDataTrigger>
+                        <DataTrigger Binding="{Binding IsCameraPlaceholder}" Value="True">
+                            <Setter TargetName="_contentPanel" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="_cameraPanel"  Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
                     </DataTemplate.Triggers>
                 </DataTemplate>
             </Setter.Value>

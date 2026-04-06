@@ -288,13 +288,15 @@ namespace CameraControl.Layouts
             while (element != null && !(element is ListBoxItem))
                 element = VisualTreeHelper.GetParent(element);
             var clickedItem = (element as ListBoxItem)?.DataContext as FileItem;
-            if (clickedItem == null || !clickedItem.Visible) return;
+            if (clickedItem == null || !clickedItem.Visible || clickedItem.IsCameraPlaceholder) return;
 
             bool wasInsertPoint = clickedItem.IsInsertPoint;
             foreach (var f in ServiceProvider.Settings.DefaultSession.Files)
                 if (f.IsInsertPoint) f.IsInsertPoint = false;
             if (!wasInsertPoint)
                 clickedItem.IsInsertPoint = true;
+
+            ServiceProvider.Settings.DefaultSession?.MoveCameraPlaceholder();
         }
 
         private void worker_DoWork(object sender, DoWorkEventArgs e)
@@ -374,6 +376,10 @@ namespace CameraControl.Layouts
 
         private void Settings_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
+            if (e.PropertyName == nameof(ServiceProvider.Settings.InsertMode))
+            {
+                Dispatcher.Invoke(() => ServiceProvider.Settings.DefaultSession?.MoveCameraPlaceholder());
+            }
             if (e.PropertyName == "DefaultSession")
             {
                 Thread.Sleep(1000);

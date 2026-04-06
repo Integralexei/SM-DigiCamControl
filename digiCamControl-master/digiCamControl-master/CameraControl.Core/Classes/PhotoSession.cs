@@ -274,7 +274,7 @@ namespace CameraControl.Core.Classes
 
         [JsonIgnore]
         [XmlIgnore]
-        public int VisibleFilesCount => Files?.Count(f => f.Visible) ?? 0;
+        public int VisibleFilesCount => Files?.Count(f => f.Visible && !f.IsCameraPlaceholder) ?? 0;
 
         private BracketingClass _braketing;
 
@@ -727,6 +727,40 @@ namespace CameraControl.Core.Classes
                     Files.Add(newItem);
                 return newItem;
             }
+        }
+
+        public void EnsureCameraPlaceholder()
+        {
+            if (Files.Any(f => f.IsCameraPlaceholder)) return;
+            Files.Add(new FileItem { IsCameraPlaceholder = true, Visible = true });
+        }
+
+        /// <summary>
+        /// Repositions the camera placeholder tile. Must be called on the UI thread.
+        /// </summary>
+        public void MoveCameraPlaceholder()
+        {
+            var cam = Files.FirstOrDefault(f => f.IsCameraPlaceholder);
+            if (cam == null) return;
+
+            int currentIdx = Files.IndexOf(cam);
+
+            if (ServiceProvider.Settings.InsertMode)
+            {
+                var insertPoint = Files.FirstOrDefault(f => f.IsInsertPoint);
+                if (insertPoint != null)
+                {
+                    int insertIdx = Files.IndexOf(insertPoint);
+                    if (currentIdx == insertIdx - 1) return; // already just before insert point
+                    Files.Remove(cam);
+                    Files.Insert(Files.IndexOf(insertPoint), cam);
+                    return;
+                }
+            }
+
+            if (currentIdx == Files.Count - 1) return; // already at end
+            Files.Remove(cam);
+            Files.Add(cam);
         }
 
         /// <summary>

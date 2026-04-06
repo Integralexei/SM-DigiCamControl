@@ -40,12 +40,16 @@ namespace CameraControl.ViewModel
     public class MotionGuide
     {
         // Normalised coordinates in [0, 1000] (matching the 1000x1000 logical canvas)
-        public double X0 { get; set; }
-        public double Y0 { get; set; }
-        public double X1 { get; set; }
-        public double Y1 { get; set; }
+        public double X0  { get; set; }
+        public double Y0  { get; set; }
+        public double X1  { get; set; }
+        public double Y1  { get; set; }
         public double CpX { get; set; }
         public double CpY { get; set; }
+        // Per-guide appearance — Newtonsoft leaves missing JSON fields at defaults (backward compat)
+        public string Color      { get; set; } = "#FFE57F";
+        public int    FrameCount { get; set; } = 8;
+        public string Easing     { get; set; } = "Linear"; // Linear|EaseIn|EaseOut|EaseInOut
     }
 
     public class LiveViewViewModel : ViewModelBase
@@ -91,8 +95,13 @@ namespace CameraControl.ViewModel
         private int _onionLastTargetHeight = 0;
 
         // Motion guide fields
-        private bool _motionGuidesVisible = false;
-        private bool _motionGuidesDrawMode = false;
+        private bool   _motionGuidesVisible  = false;
+        private bool   _motionGuidesDrawMode = false;
+        private bool   _motionGuidesEditMode = false;
+        private int    _selectedGuideIndex   = -1;
+        private string _guideColor           = "#FFE57F";
+        private int    _guideFrameCount      = 8;
+        private string _guideEasing          = "Linear";
 
         private ICameraDevice _cameraDevice;
         private CameraProperty _cameraProperty;
@@ -517,12 +526,93 @@ namespace CameraControl.ViewModel
             {
                 _motionGuidesDrawMode = value;
                 RaisePropertyChanged(() => MotionGuidesDrawMode);
+                RaisePropertyChanged(() => MotionGuidesInteractive);
+                if (value) MotionGuidesEditMode = false;
             }
         }
 
-        public RelayCommand ToggleGuideDrawModeCommand { get; private set; }
-        public RelayCommand ClearGuidesCommand { get; private set; }
-        public RelayCommand RemoveLastGuideCommand { get; private set; }
+        public bool MotionGuidesEditMode
+        {
+            get => _motionGuidesEditMode;
+            set
+            {
+                _motionGuidesEditMode = value;
+                RaisePropertyChanged(() => MotionGuidesEditMode);
+                RaisePropertyChanged(() => MotionGuidesInteractive);
+                if (value) MotionGuidesDrawMode = false;
+            }
+        }
+
+        public bool MotionGuidesInteractive => _motionGuidesDrawMode || _motionGuidesEditMode;
+
+        public int SelectedGuideIndex
+        {
+            get => _selectedGuideIndex;
+            set
+            {
+                _selectedGuideIndex = value;
+                RaisePropertyChanged(() => SelectedGuideIndex);
+                RaisePropertyChanged(() => IsGuideSelected);
+                if (value >= 0 && value < MotionGuides.Count)
+                {
+                    var g = MotionGuides[value];
+                    _guideColor      = g.Color;
+                    _guideFrameCount = g.FrameCount;
+                    _guideEasing     = g.Easing;
+                    RaisePropertyChanged(() => GuideColor);
+                    RaisePropertyChanged(() => GuideFrameCount);
+                    RaisePropertyChanged(() => GuideEasing);
+                }
+                DeleteSelectedGuideCommand.RaiseCanExecuteChanged();
+            }
+        }
+
+        public bool IsGuideSelected =>
+            _selectedGuideIndex >= 0 && _selectedGuideIndex < MotionGuides.Count;
+
+        public string GuideColor
+        {
+            get => _guideColor;
+            set { _guideColor = value; RaisePropertyChanged(() => GuideColor); ApplyToSelected(); }
+        }
+
+        public int GuideFrameCount
+        {
+            get => _guideFrameCount;
+            set
+            {
+                _guideFrameCount = Math.Max(3, Math.Min(24, value));
+                RaisePropertyChanged(() => GuideFrameCount);
+                ApplyToSelected();
+            }
+        }
+
+        public string GuideEasing
+        {
+            get => _guideEasing;
+            set { _guideEasing = value; RaisePropertyChanged(() => GuideEasing); ApplyToSelected(); }
+        }
+
+        private void ApplyToSelected()
+        {
+            if (!IsGuideSelected) return;
+            var g = MotionGuides[_selectedGuideIndex];
+            g.Color      = _guideColor;
+            g.FrameCount = _guideFrameCount;
+            g.Easing     = _guideEasing;
+            GuideAppearanceChanged?.Invoke(this, EventArgs.Empty);
+            SaveMotionGuides();
+        }
+
+        public event EventHandler GuideAppearanceChanged;
+
+        public static readonly string[] GuideColorOptions =
+            { "#FFE57F", "#FF5252", "#40C4FF", "#69F0AE", "#FF6D00" };
+
+        public RelayCommand ToggleGuideDrawModeCommand  { get; private set; }
+        public RelayCommand ClearGuidesCommand          { get; private set; }
+        public RelayCommand RemoveLastGuideCommand      { get; private set; }
+        public RelayCommand DeleteSelectedGuideCommand  { get; private set; }
 
         // --- Insert Mode property ---
 
@@ -534,6 +624,7 @@ namespace CameraControl.ViewModel
                 ServiceProvider.Settings.InsertMode = value;
                 RaisePropertyChanged(() => InsertMode);
                 InvalidateOnionCache();
+                UpdateCameraPlaceholder();
             }
         }
 
@@ -541,12 +632,22 @@ namespace CameraControl.ViewModel
         {
             get
             {
-                var visible = ServiceProvider.Settings.DefaultSession?.Files?.Where(f => f.Visible).ToList();
+                var visible = ServiceProvider.Settings.DefaultSession?.Files?
+                    .Where(f => f.Visible && !f.IsCameraPlaceholder).ToList();
                 if (visible == null) return 0;
                 for (int i = 0; i < visible.Count; i++)
                     if (visible[i].IsInsertPoint) return i + 1;
                 return 0;
             }
+        }
+
+        internal void UpdateCameraPlaceholder()
+        {
+            var action = new Action(() => ServiceProvider.Settings.DefaultSession?.MoveCameraPlaceholder());
+            if (Application.Current?.Dispatcher.CheckAccess() == true)
+                action();
+            else
+                Application.Current?.Dispatcher.Invoke(action);
         }
 
         private string GetGuidesFilePath()
@@ -1673,6 +1774,7 @@ namespace CameraControl.ViewModel
             ClearGuidesCommand = new RelayCommand(() =>
             {
                 MotionGuides.Clear();
+                SelectedGuideIndex = -1;
                 SaveMotionGuides();
             });
 
@@ -1687,8 +1789,22 @@ namespace CameraControl.ViewModel
                 },
                 () => MotionGuides.Count > 0);
 
+            DeleteSelectedGuideCommand = new RelayCommand(
+                () =>
+                {
+                    MotionGuides.RemoveAt(_selectedGuideIndex);
+                    SelectedGuideIndex = -1;
+                    SaveMotionGuides();
+                },
+                () => IsGuideSelected);
+
             MotionGuides.CollectionChanged += (s, e) =>
+            {
                 RemoveLastGuideCommand.RaiseCanExecuteChanged();
+                // Keep SelectedGuideIndex valid if guides were removed externally
+                if (_selectedGuideIndex >= MotionGuides.Count)
+                    SelectedGuideIndex = -1;
+            };
         }
 
         private void CaptureSnapshot()
@@ -2004,8 +2120,9 @@ namespace CameraControl.ViewModel
                 // Keep existing bitmaps visible while new ones load — no flash to blank
             }
 
-            // Snapshot the files list to avoid race conditions
-            var files = ServiceProvider.Settings.DefaultSession?.Files?.ToList();
+            // Snapshot the files list to avoid race conditions (exclude camera placeholder)
+            var files = ServiceProvider.Settings.DefaultSession?.Files?
+                .Where(f => !f.IsCameraPlaceholder).ToList();
             if (files == null || files.Count == 0) return;
 
             // Determine prev and next reference frames:
